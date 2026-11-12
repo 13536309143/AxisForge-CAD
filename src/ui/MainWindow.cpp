@@ -614,6 +614,15 @@ void MainWindow::showProperties() {
     numbers_["radius"]->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid);
     numbers_["tubeRadius"]->setEnabled(b->shape == Shape::Torus);
     segments_->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid);
+    for (const auto &key : QStringList{"width", "depth", "height", "radius", "tubeRadius"}) {
+        auto *spin = numbers_[key];
+        spin->setSpecialValueText(b->shape == Shape::Solid ? QStringLiteral("由实体定义") : QString());
+        if (b->shape == Shape::Solid)
+            spin->setValue(spin->minimum());
+    }
+    segments_->setSpecialValueText(b->shape == Shape::Solid ? QStringLiteral("由实体定义") : QString());
+    if (b->shape == Shape::Solid)
+        segments_->setValue(segments_->minimum());
     const auto e = b->rotation.toEulerAngles();
     for (int i = 0; i < 3; ++i) {
         numbers_[QString("pos%1").arg(i)]->setValue(b->position[i]);
@@ -642,13 +651,15 @@ void MainWindow::applyProperties() {
     updated.color = pendingColor_;
     updated.visible = visible_->isChecked();
     updated.fixed = fixed_->isChecked();
-    auto &p = updated.params;
-    p.width = numbers_["width"]->value();
-    p.depth = numbers_["depth"]->value();
-    p.height = numbers_["height"]->value();
-    p.radius = numbers_["radius"]->value();
-    p.tubeRadius = numbers_["tubeRadius"]->value();
-    p.segments = segments_->value();
+    if (updated.shape != Shape::Solid) {
+        auto &p = updated.params;
+        p.width = numbers_["width"]->value();
+        p.depth = numbers_["depth"]->value();
+        p.height = numbers_["height"]->value();
+        p.radius = numbers_["radius"]->value();
+        p.tubeRadius = numbers_["tubeRadius"]->value();
+        p.segments = segments_->value();
+    }
     updated.position = {float(numbers_["pos0"]->value()), float(numbers_["pos1"]->value()),
                         float(numbers_["pos2"]->value())};
     updated.rotation =
