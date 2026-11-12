@@ -29,6 +29,7 @@ class MainWindow final : public QMainWindow {
 
   protected:
     void closeEvent(QCloseEvent *event) override;
+    bool eventFilter(QObject *object, QEvent *event) override;
 
   private:
     void buildActions();
@@ -38,6 +39,7 @@ class MainWindow final : public QMainWindow {
     void applyProperties();
     void addMateDialog();
     void deleteMate();
+    void deleteSelection();
     bool mayDiscard();
     void log(const QString &text);
     QString selection_, path_;

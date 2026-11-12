@@ -38,6 +38,11 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
   signals:
     void selected(const QString &id);
     void cameraChanged();
+    void moveStarted(const QString &id);
+    void movePreview(const QString &id, const QVector3D &position);
+    void moveFinished(bool commit);
+    void deleteRequested();
+    void interactionMessage(const QString &message);
 
   protected:
     void initializeGL() override;
@@ -46,6 +51,7 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
   private:
     struct GpuMesh {
@@ -61,6 +67,7 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     QMatrix4x4 view() const;
     QMatrix4x4 projection() const;
     QVector3D eye() const;
+    bool dragPoint(const QPoint &point, QVector3D &world) const;
     Scene scene_;
     QString selected_, renderer_, error_;
     bool dirty_ = true, wireframe_ = false, orthographic_ = false;
@@ -68,6 +75,9 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     QVector3D target_ = {0, 0, 30};
     QPoint lastMouse_, pressMouse_;
     bool dragged_ = false;
+    QString dragId_;
+    QVector3D dragOrigin_, dragAnchor_, dragNormal_;
+    bool moving_ = false;
     std::unique_ptr<QOpenGLShaderProgram> program_;
     std::vector<std::unique_ptr<GpuMesh>> meshes_;
     std::unique_ptr<GpuMesh> grid_;

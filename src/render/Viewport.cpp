@@ -1,4 +1,5 @@
 #include "Viewport.h"
+#include <QKeyEvent>
 #include <QOpenGLContext>
 #include <QPainter>
 #include <QSurfaceFormat>
@@ -269,7 +270,7 @@ void Viewport::paintGL() {
                orthographic_ ? QStringLiteral("ORTHOGRAPHIC  /  正交视图")
                              : QStringLiteral("PERSPECTIVE  /  透视视图"));
     p.drawText(22, height() - 22,
-               QStringLiteral("左键选择   ·   右键旋转   ·   中键平移   ·   滚轮缩放   ·   F 适应全部"));
+               QStringLiteral("左键选择/拖动模型 · Delete 删除 · Esc 取消拖动 · 右键旋转 · 中键平移"));
     if (!error_.isEmpty()) {
         p.setPen(QColor("#f29292"));
         p.drawText(rect().adjusted(30, 60, -30, -60), Qt::TextWordWrap, error_);
@@ -290,12 +291,35 @@ void Viewport::mousePressEvent(QMouseEvent *e) {
     lastMouse_ = pressMouse_ = e->pos();
     dragged_ = false;
     setFocus();
+    if (e->button() == Qt::LeftButton) {
+        dragId_ = pickAt(e->pos());
+        emit selected(dragId_);
+        const auto *body = scene_.find(dragId_);
+        if (body && !body->fixed) {
+            dragOrigin_ = body->position;
+            dragNormal_ = (eye() - target_).normalized();
+            if (!dragPoint(e->pos(), dragAnchor_))
+                dragId_.clear();
+        } else {
+            if (body)
+                emit interactionMessage(QStringLiteral("模型已固定；取消固定后可拖动。"));
+            dragId_.clear();
+        }
+    }
 }
 void Viewport::mouseMoveEvent(QMouseEvent *e) {
     auto delta = e->pos() - lastMouse_;
     if ((e->pos() - pressMouse_).manhattanLength() > 3)
         dragged_ = true;
-    if (e->buttons() & Qt::RightButton) {
+    if ((e->buttons() & Qt::LeftButton) && dragged_ && !dragId_.isEmpty()) {
+        if (!moving_) {
+            moving_ = true;
+            emit moveStarted(dragId_);
+        }
+        QVector3D point;
+        if (dragPoint(e->pos(), point))
+            emit movePreview(dragId_, dragOrigin_ + point - dragAnchor_);
+    } else if (e->buttons() & Qt::RightButton) {
         yaw_ -= delta.x() * 0.4f;
         pitch_ = qBound(-89.0f, pitch_ + delta.y() * 0.4f, 89.0f);
         update();
@@ -310,8 +334,43 @@ void Viewport::mouseMoveEvent(QMouseEvent *e) {
     lastMouse_ = e->pos();
 }
 void Viewport::mouseReleaseEvent(QMouseEvent *e) {
-    if (e->button() == Qt::LeftButton && !dragged_)
-        emit selected(pickAt(e->pos()));
+    if (e->button() == Qt::LeftButton) {
+        if (moving_)
+            emit moveFinished(true);
+        moving_ = false;
+        dragId_.clear();
+    }
+}
+bool Viewport::dragPoint(const QPoint &point, QVector3D &world) const {
+    bool ok = false;
+    auto inverse = (projection() * view()).inverted(&ok);
+    if (!ok)
+        return false;
+    float x = 2.0f * point.x() / qMax(1, width()) - 1;
+    float y = 1 - 2.0f * point.y() / qMax(1, height());
+    auto a = (inverse * QVector4D(x, y, -1, 1)).toVector3DAffine();
+    auto b = (inverse * QVector4D(x, y, 1, 1)).toVector3DAffine();
+    auto direction = b - a;
+    float divisor = QVector3D::dotProduct(direction, dragNormal_);
+    if (std::abs(divisor) < 1e-8f)
+        return false;
+    world = a + direction * (QVector3D::dotProduct(dragOrigin_ - a, dragNormal_) / divisor);
+    return true;
+}
+void Viewport::keyPressEvent(QKeyEvent *e) {
+    if (e->key() == Qt::Key_Escape && moving_) {
+        moving_ = false;
+        dragId_.clear();
+        emit moveFinished(false);
+        e->accept();
+        return;
+    }
+    if (e->key() == Qt::Key_Delete && !moving_) {
+        emit deleteRequested();
+        e->accept();
+        return;
+    }
+    QOpenGLWidget::keyPressEvent(e);
 }
 void Viewport::wheelEvent(QWheelEvent *e) {
     distance_ = qBound(2.0f, distance_ * float(std::pow(0.88, e->angleDelta().y() / 120.0)), 30000.0f);

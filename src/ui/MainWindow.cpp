@@ -75,6 +75,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), document_(this) {
                        (document_.history()->isClean() ? QString() : QStringLiteral(" *")));
     });
     connect(viewport_, &Viewport::selected, this, &MainWindow::selectBody);
+    connect(viewport_, &Viewport::moveStarted, &document_, &Document::beginMove);
+    connect(viewport_, &Viewport::movePreview, &document_, &Document::previewMove);
+    connect(viewport_, &Viewport::moveFinished, &document_, &Document::finishMove);
+    connect(viewport_, &Viewport::deleteRequested, this, &MainWindow::deleteSelection);
+    connect(viewport_, &Viewport::interactionMessage, this,
+            [this](const QString &m) { statusBar()->showMessage(m, 6000); });
     document_.replace(demoScene());
     selection_ = document_.scene().bodies[1].id;
     refresh();
@@ -152,14 +158,15 @@ void MainWindow::buildActions() {
     edit->addAction(redo);
     action(edit, QStringLiteral("复制所选模型"), "Ctrl+D", "duplicateBody",
            [this] { selectBody(document_.duplicateBody(selection_)); });
-    action(edit, QStringLiteral("删除所选模型及相关配合"), "Delete", "deleteBody",
-           [this] { document_.removeBody(selection_); });
+    auto *deleteAction = action(edit, QStringLiteral("删除所选模型及相关配合"), {}, "deleteBody",
+                                [this] { deleteSelection(); });
     auto *toolbar = addToolBar(QStringLiteral("建模工具"));
     toolbar->setMovable(false);
     toolbar->setObjectName("modelingToolbar");
     auto *brand = new QLabel("AXISFORGE");
     brand->setObjectName("brand");
     toolbar->addWidget(brand);
+    toolbar->addAction(deleteAction);
     for (int i = 0; i < 5; ++i) {
         auto shape = Shape(i);
         auto *a = action(create, shapeName(shape), QString("Ctrl+%1").arg(i + 1), "create" + shapeKey(shape),
@@ -205,12 +212,16 @@ void MainWindow::buildActions() {
     });
 }
 void MainWindow::buildPanels() {
+    auto *panels = menuBar()->addMenu(QStringLiteral("面板"));
     auto *dock = new QDockWidget(QStringLiteral("装配导航  /  ASSEMBLY"), this);
     dock->setObjectName("assemblyDock");
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     auto *tabs = new QTabWidget;
     tree_ = new QTreeWidget;
     tree_->setObjectName("sceneTree");
+    tree_->installEventFilter(this);
+    tree_->setContextMenuPolicy(Qt::ActionsContextMenu);
+    tree_->addAction(findChild<QAction *>("deleteBody"));
     tree_->setHeaderLabels({QStringLiteral("模型"), QStringLiteral("状态")});
     tree_->setRootIsDecorated(false);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
@@ -233,6 +244,7 @@ void MainWindow::buildPanels() {
     tabs->addTab(matePage, QStringLiteral("配合关系"));
     dock->setWidget(tabs);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
+    panels->addAction(dock->toggleViewAction());
     dock->setMinimumWidth(225);
     resizeDocks({dock}, {255}, Qt::Horizontal);
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this] {
@@ -332,6 +344,9 @@ void MainWindow::buildPanels() {
     propertyDock->setWidget(scroll);
     propertyDock->setMinimumWidth(285);
     addDockWidget(Qt::RightDockWidgetArea, propertyDock);
+    propertyDock->toggleViewAction()->setObjectName("toggleProperties");
+    propertyDock->toggleViewAction()->setShortcut(QKeySequence("Ctrl+I"));
+    panels->addAction(propertyDock->toggleViewAction());
     resizeDocks({propertyDock}, {310}, Qt::Horizontal);
     auto *logDock = new QDockWidget(QStringLiteral("工作台日志"), this);
     logDock->setObjectName("logDock");
@@ -340,6 +355,7 @@ void MainWindow::buildPanels() {
     log_->setMaximumBlockCount(200);
     logDock->setWidget(log_);
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
+    panels->addAction(logDock->toggleViewAction());
     resizeDocks({logDock}, {92}, Qt::Vertical);
     summary_ = new QLabel;
     statusBar()->addPermanentWidget(summary_);
@@ -553,6 +569,25 @@ void MainWindow::addMateDialog() {
     });
     dialog.exec();
 }
+void MainWindow::deleteSelection() {
+    const QString id = selection_;
+    if (!document_.scene().find(id)) {
+        statusBar()->showMessage(QStringLiteral("请先选择要删除的模型。"), 4000);
+        return;
+    }
+    document_.finishMove(false);
+    document_.removeBody(id);
+    selectBody({});
+    log(QStringLiteral("模型与相关配合已删除；Ctrl+Z 可撤销。"));
+}
+bool MainWindow::eventFilter(QObject *object, QEvent *event) {
+    if (object == tree_ && event->type() == QEvent::KeyPress &&
+        static_cast<QKeyEvent *>(event)->key() == Qt::Key_Delete) {
+        deleteSelection();
+        return true;
+    }
+    return QMainWindow::eventFilter(object, event);
+}
 void MainWindow::deleteMate() {
     auto *item = mateTree_->currentItem();
     if (!item) {
@@ -680,6 +715,63 @@ int MainWindow::runSelfTest(const QString &directory) {
                             Qt::NoModifier);
         QApplication::sendEvent(viewport_, &release);
         check(selection_ == body.id, "mouse selection updates inspector");
+        auto *properties = findChild<QDockWidget *>("propertyDock");
+        properties->close();
+        check(!properties->isVisible(), "properties panel closes");
+        findChild<QAction *>("toggleProperties")->trigger();
+        check(properties->isVisible(), "properties panel reopens from menu");
+        int historyBefore = document_.history()->count();
+        QMouseEvent dragPress(QEvent::MouseButtonPress, QPointF(point), Qt::LeftButton, Qt::LeftButton,
+                              Qt::NoModifier);
+        QApplication::sendEvent(viewport_, &dragPress);
+        for (int i = 1; i <= 3; ++i) {
+            QMouseEvent dragMove(QEvent::MouseMove, QPointF(point + QPoint(i * 15, 0)), Qt::NoButton,
+                                 Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(viewport_, &dragMove);
+        }
+        QMouseEvent dragRelease(QEvent::MouseButtonRelease, QPointF(point + QPoint(45, 0)), Qt::LeftButton,
+                                Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(viewport_, &dragRelease);
+        check(!vectorsClose(document_.scene().find(body.id)->position, body.position),
+              "left drag moves model");
+        check(document_.history()->count() == historyBefore + 1, "drag creates one undo command");
+        document_.history()->undo();
+        check(vectorsClose(document_.scene().find(body.id)->position, body.position),
+              "undo restores dragged model");
+        document_.beginMove(body.id);
+        document_.previewMove(body.id, {20, 0, 0});
+        document_.finishMove(false);
+        check(vectorsClose(document_.scene().find(body.id)->position, body.position),
+              "cancel restores drag preview");
+        selectBody(body.id);
+        QKeyEvent deleteKey(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+        QApplication::sendEvent(viewport_, &deleteKey);
+        check(document_.scene().bodies.isEmpty() && viewport_->pickAt(point).isEmpty(),
+              "Delete removes model from scene and picking");
+        document_.history()->undo();
+        selectBody(body.id);
+        QApplication::sendEvent(tree_, &deleteKey);
+        check(document_.scene().bodies.isEmpty(), "tree Delete removes model");
+        document_.history()->undo();
+        selectBody(body.id);
+        findChild<QAction *>("deleteBody")->trigger();
+        check(document_.scene().bodies.isEmpty(), "toolbar delete action removes model");
+        document_.history()->undo();
+        selectBody(body.id);
+        document_.replace(demo);
+        const auto driver = demo.bodies[1].id;
+        document_.beginMove(driver);
+        document_.previewMove(driver, demo.bodies[1].position + QVector3D(17, 0, 0));
+        document_.finishMove(true);
+        check(std::abs(document_.scene().bodies[2].position.x() - 17) < 0.001f,
+              "drag propagates coaxial follower");
+        selectBody(driver);
+        findChild<QAction *>("deleteBody")->trigger();
+        check(!document_.scene().find(driver) && document_.scene().mates.isEmpty(),
+              "delete cascades attached mates");
+        document_.replace(solo);
+        selectBody(body.id);
+        viewport_->fitAll();
         int cameraSignals = 0;
         auto connection = connect(viewport_, &Viewport::cameraChanged, this, [&] { ++cameraSignals; });
         QMouseEvent rightPress(QEvent::MouseButtonPress, QPointF(point), Qt::RightButton, Qt::RightButton,

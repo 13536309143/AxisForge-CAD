@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QUndoStack>
 #include <functional>
+#include <memory>
 namespace af {
 class Document : public QObject {
     Q_OBJECT
@@ -19,6 +20,9 @@ class Document : public QObject {
     QString addBody(Shape shape);
     void removeBody(const QString &id);
     QString duplicateBody(const QString &id);
+    void beginMove(const QString &id);
+    void previewMove(const QString &id, const QVector3D &position);
+    void finishMove(bool commit);
   signals:
     void changed();
     void rejected(const QString &message);
@@ -27,5 +31,7 @@ class Document : public QObject {
     friend class SnapshotCommand;
     Scene scene_;
     QUndoStack history_;
+    std::unique_ptr<Scene> moveBefore_;
+    QString movingId_;
 };
 } // namespace af
