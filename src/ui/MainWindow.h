@@ -38,6 +38,7 @@ class MainWindow final : public QMainWindow {
     void showProperties();
     void applyProperties();
     void addMateDialog();
+    void booleanDialog(BooleanOp op);
     void deleteMate();
     void deleteSelection();
     void buildSceneStats();

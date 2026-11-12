@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "app/ProcessMemory.h"
 #include "core/Constraints.h"
+#include "core/Kernel.h"
 #include "core/ProjectIO.h"
 #include <QAction>
 #include <QApplication>
@@ -140,6 +141,30 @@ void MainWindow::buildActions() {
             saveFile(p);
     });
     file->addSeparator();
+    action(file, QStringLiteral("导入 STEP 实体…"), "Ctrl+Shift+O", "importStep", [this] {
+        auto path = QFileDialog::getOpenFileName(this, QStringLiteral("导入 STEP"), {},
+                                                 "STEP (*.step *.stp *.STEP *.STP)");
+        if (path.isEmpty())
+            return;
+        QString why;
+        if (!document_.importStepFile(path, &why))
+            QMessageBox::warning(this, QStringLiteral("STEP 导入失败"), why);
+        else {
+            viewport_->fitAll();
+            log(QStringLiteral("已导入 STEP 实体：") + path);
+        }
+    });
+    action(file, QStringLiteral("导出 STEP 实体…"), "Ctrl+Shift+E", "exportStep", [this] {
+        auto path = QFileDialog::getSaveFileName(this, QStringLiteral("导出可见实体"), "assembly.step",
+                                                 "STEP (*.step *.stp)");
+        if (path.isEmpty())
+            return;
+        QString why;
+        if (!exportStep(path, document_.scene(), &why))
+            QMessageBox::warning(this, QStringLiteral("STEP 导出失败"), why);
+        else
+            log(QStringLiteral("已导出 STEP 实体：") + path);
+    });
     for (int i = 0; i < 2; ++i)
         action(file, i ? QStringLiteral("导出 STL…") : QStringLiteral("导出 OBJ…"), {},
                i ? "exportStl" : "exportObj", [this, i] {
@@ -184,6 +209,34 @@ void MainWindow::buildActions() {
         toolbar->addAction(a);
     }
     toolbar->addSeparator();
+    auto *solidMenu = menuBar()->addMenu(QStringLiteral("实体"));
+    const QStringList operationNames = {QStringLiteral("布尔并集 A ∪ B"), QStringLiteral("布尔差集 A − B"),
+                                        QStringLiteral("布尔交集 A ∩ B")};
+    for (int i = 0; i < 3; ++i)
+        action(solidMenu, operationNames[i], {}, QString("boolean%1").arg(i),
+               [this, i] { booleanDialog(BooleanOp(i)); });
+    action(solidMenu, QStringLiteral("加载通孔实体示例"), {}, "solidExample", [this] {
+        if (!mayDiscard())
+            return;
+        Scene example;
+        example.title = QStringLiteral("OCCT · 通孔实体");
+        auto block = makeBody(Shape::Box), drill = makeBody(Shape::Cylinder);
+        block.name = QStringLiteral("方形基体 A");
+        block.params.width = block.params.depth = 60;
+        block.params.height = 20;
+        drill.name = QStringLiteral("钻孔工具 B");
+        drill.params.radius = 12;
+        drill.params.height = 40;
+        example.bodies = {block, drill};
+        document_.replace(example);
+        path_.clear();
+        auto id = document_.booleanOperation(block.id, drill.id, BooleanOp::Cut);
+        selectBody(id);
+        viewport_->fitAll();
+    });
+    auto *booleanButton = new QAction(QStringLiteral("布尔运算"), this);
+    connect(booleanButton, &QAction::triggered, this, [this] { booleanDialog(BooleanOp::Cut); });
+    toolbar->addAction(booleanButton);
     auto *mate =
         action(assembly, QStringLiteral("添加配合…"), "Ctrl+M", "addMate", [this] { addMateDialog(); });
     toolbar->addAction(mate);
@@ -214,7 +267,8 @@ void MainWindow::buildActions() {
                 "切换视图。\n\n装配：添加配合，选基准模型和从动模型，再选择各自局部轴。修改基准后从动模型跟随"
                 "。\n\n同轴仅约束轴线重合，允许沿轴平移和绕轴旋转。平行/"
                 "垂直约束轴方向，中心距离约束模型原点间距离。固定模型不会被求解器移动。\n\n配合循环或冲突会被"
-                "拒绝并回滚。当前采用参数图元和三角网格，不包含布尔运算、草图拉伸或 STEP 实体内核。"));
+                "拒绝并回滚。当前已接入 OCCT 实体、布尔并/差/交和 STEP "
+                "交换；暂不包含草图拉伸和完整特征历史。"));
     });
 }
 void MainWindow::buildPanels() {
@@ -557,20 +611,27 @@ void MainWindow::showProperties() {
     numbers_["depth"]->setEnabled(b->shape == Shape::Box);
     numbers_["height"]->setEnabled(b->shape == Shape::Box || b->shape == Shape::Cylinder ||
                                    b->shape == Shape::Cone);
-    numbers_["radius"]->setEnabled(b->shape != Shape::Box);
+    numbers_["radius"]->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid);
     numbers_["tubeRadius"]->setEnabled(b->shape == Shape::Torus);
-    segments_->setEnabled(b->shape != Shape::Box);
+    segments_->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid);
     const auto e = b->rotation.toEulerAngles();
     for (int i = 0; i < 3; ++i) {
         numbers_[QString("pos%1").arg(i)]->setValue(b->position[i]);
         numbers_[QString("rot%1").arg(i)]->setValue(e[i]);
     }
     const int triangles = tessellate(*b).vertices.size() / 3;
-    stats_->setText(QStringLiteral("几何信息\n体积  %1 mm³\n表面积  %2 mm²\n显示网格  %3 "
-                                   "个三角形\n\n参数为解析尺寸；显示与导出使用离散网格。")
-                        .arg(volume(*b), 0, 'f', 2)
-                        .arg(surfaceArea(*b), 0, 'f', 2)
-                        .arg(triangles));
+    const auto topology = solidData(*b);
+    stats_->setText(
+        QStringLiteral(
+            "OCCT %4 · 实体 %5 / 面 %6 / 边 %7\n几何信息\n体积  %1 mm³\n表面积  %2 mm²\n显示网格  %3 "
+            "个三角形\n\n参数为解析尺寸；显示与导出使用离散网格。")
+            .arg(volume(*b), 0, 'f', 2)
+            .arg(surfaceArea(*b), 0, 'f', 2)
+            .arg(triangles)
+            .arg(kernelVersion())
+            .arg(topology->solids)
+            .arg(topology->faces)
+            .arg(topology->edges));
 }
 void MainWindow::applyProperties() {
     if (selection_.isEmpty())
@@ -598,6 +659,62 @@ void MainWindow::applyProperties() {
         log(QStringLiteral("参数已应用；关联配合已重新求解。"));
     else
         showProperties();
+}
+void MainWindow::booleanDialog(BooleanOp op) {
+    if (document_.scene().bodies.size() < 2) {
+        statusBar()->showMessage(QStringLiteral("布尔运算需要至少两个模型。"), 6000);
+        return;
+    }
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("OCCT 实体布尔运算"));
+    dialog.setMinimumWidth(460);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *form = new QFormLayout;
+    auto *a = new QComboBox, *b = new QComboBox, *type = new QComboBox;
+    for (const auto &body : document_.scene().bodies) {
+        a->addItem(body.name, body.id);
+        b->addItem(body.name, body.id);
+    }
+    int current = a->findData(selection_);
+    a->setCurrentIndex(current >= 0 ? current : 0);
+    b->setCurrentIndex(a->currentIndex() == 0 ? 1 : 0);
+    type->addItems(
+        {QStringLiteral("并集 A ∪ B"), QStringLiteral("差集 A − B"), QStringLiteral("交集 A ∩ B")});
+    type->setCurrentIndex(int(op));
+    form->addRow(QStringLiteral("主对象 A"), a);
+    form->addRow(QStringLiteral("工具对象 B"), b);
+    form->addRow(QStringLiteral("运算"), type);
+    layout->addLayout(form);
+    auto *hide = new QCheckBox(QStringLiteral("成功后隐藏 A/B，保留原模型及其配合"));
+    hide->setChecked(true);
+    layout->addWidget(hide);
+    auto *info = new QLabel(
+        QStringLiteral("差集表示从 A 中减去 B。结果是新的独立实体快照，可继续布尔、移动和 STEP 导出；修改 "
+                       "A/B 不会自动重建结果。空交集或零体积结果会被拒绝，原场景保持不变。"));
+    info->setWordWrap(true);
+    layout->addWidget(info);
+    auto *feedback = new QLabel;
+    feedback->setWordWrap(true);
+    feedback->setStyleSheet("color:#efaaaa;");
+    layout->addWidget(feedback);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
+        QString why;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        auto id = document_.booleanOperation(a->currentData().toString(), b->currentData().toString(),
+                                             BooleanOp(type->currentIndex()), hide->isChecked(), &why);
+        QApplication::restoreOverrideCursor();
+        if (id.isEmpty()) {
+            feedback->setText(why);
+            return;
+        }
+        selectBody(id);
+        viewport_->fitAll();
+        dialog.accept();
+    });
+    dialog.exec();
 }
 void MainWindow::addMateDialog() {
     if (document_.scene().bodies.size() < 2) {
@@ -935,6 +1052,44 @@ int MainWindow::runSelfTest(const QString &directory) {
         document_.replace(demo);
         selectBody(demo.bodies[1].id);
         viewport_->setView(0);
+        viewport_->fitAll();
+        QApplication::processEvents();
+        check(findChild<QAction *>("importStep") && findChild<QAction *>("exportStep") &&
+                  findChild<QAction *>("boolean1"),
+              "OCCT actions registered");
+        Scene solidExample;
+        auto base = makeBody(Shape::Box), tool = makeBody(Shape::Cylinder);
+        base.params.width = base.params.depth = 60;
+        base.params.height = 20;
+        tool.params.radius = 12;
+        tool.params.height = 40;
+        solidExample.bodies = {base, tool};
+        document_.replace(solidExample);
+        const auto solidId = document_.booleanOperation(base.id, tool.id, BooleanOp::Cut, true, &why);
+        check(!solidId.isEmpty() && document_.scene().bodies.size() == 3,
+              "document boolean creates independent solid");
+        check(!document_.scene().find(base.id)->visible && !document_.scene().find(tool.id)->visible,
+              "boolean hides operands without deleting");
+        const double expectedVolume = 72000 - 3.141592653589793 * 144 * 20;
+        check(std::abs(volume(*document_.scene().find(solidId)) - expectedVolume) < 0.01,
+              "exact through-hole volume");
+        document_.history()->undo();
+        check(document_.scene().bodies.size() == 2 && document_.scene().bodies[0].visible,
+              "undo restores boolean operands");
+        document_.history()->redo();
+        check(document_.scene().find(solidId) != nullptr, "redo restores BRep result");
+        selectBody(solidId);
+        check(!numbers_["radius"]->isEnabled() && !segments_->isEnabled(),
+              "frozen BRep geometry parameters are read-only");
+        check(saveFile(directory + "/occt-hole.afcad") && openFile(directory + "/occt-hole.afcad"),
+              "BRep project disk roundtrip");
+        check(exportStep(directory + "/occt-hole.step", document_.scene(), &why), "desktop STEP export");
+        check(document_.importStepFile(directory + "/occt-hole.step", &why),
+              "desktop STEP import is undoable");
+        check(document_.scene().bodies.size() == 4, "STEP import adds visible solid");
+        document_.history()->undo();
+        check(document_.scene().bodies.size() == 3, "undo STEP import");
+        selectBody(solidId);
         viewport_->fitAll();
         QApplication::processEvents();
         auto image = viewport_->grabFramebuffer();

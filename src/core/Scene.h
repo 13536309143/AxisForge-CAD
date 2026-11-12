@@ -5,9 +5,11 @@
 #include <QString>
 #include <QVector3D>
 #include <QVector>
+#include <memory>
 
 namespace af {
-enum class Shape { Box, Sphere, Cylinder, Cone, Torus };
+enum class Shape { Box, Sphere, Cylinder, Cone, Torus, Solid };
+struct SolidData;
 enum class MateType { Coaxial, Parallel, Perpendicular, Distance };
 QString shapeKey(Shape shape);
 QString shapeName(Shape shape);
@@ -25,6 +27,9 @@ struct Body {
     QQuaternion rotation;
     QColor color = QColor("#62b6e8");
     bool visible = true, fixed = false;
+    std::shared_ptr<const SolidData> solid;
+    mutable std::shared_ptr<const SolidData> generated;
+    mutable QString geometryKey;
     QMatrix4x4 matrix() const;
     QVector3D axis(int index) const;
 };

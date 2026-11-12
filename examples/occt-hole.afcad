@@ -1,0 +1,92 @@
+{
+    "bodies": [
+        {
+            "color": "#67b8e7",
+            "fixed": false,
+            "id": "c532618c-c26f-4484-9f49-528699c6c2f5",
+            "name": "长方体 1",
+            "parameters": {
+                "depth": 60,
+                "height": 20,
+                "radius": 15,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 60
+            },
+            "position": [
+                0,
+                0,
+                0
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "box",
+            "visible": false
+        },
+        {
+            "color": "#73d0b5",
+            "fixed": false,
+            "id": "153cb993-be10-4d78-ada0-0816911d643a",
+            "name": "圆柱 1",
+            "parameters": {
+                "depth": 30,
+                "height": 40,
+                "radius": 12,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                0,
+                0,
+                0
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "cylinder",
+            "visible": false
+        },
+        {
+            "brep": "AAANmniclVbbbtswDH33V/hxW6ZCpGTLfizS7mk3IEX3bLRZG6CIi6QtsL8fRfki2XSatomjC02ec0jRztaXm/Xl1XV+0z63T+3Dv/wWvuaf7j7nP5qXQ6OumpfmbXfctfvse3vXvNDgmOts/Xp42+L9MTc6g1zTv7+mQ9Q8U9Cv+x0eqlKyXzRPhoOx6APft45NymgcwUWi5T+M1f8AshMzwQpzJPE4olnOCJ2KA+N9F1gZqAqjHbi6qEr0hqOQ3ZjTccyhoFVFDvkLUcx+ESJRVAgu2qmpYb8Y4NPiO1EGuy6KcOsYAoOL3tMorw6KREhjJ9Pwc+zYSb3oGUhPvKhNDQUar7AprSu2CgpaH1z/bp/+PbR7c0WV341/7W8Ou2b/8Po0nInN6+Fvc0dpcKJmfVwlqKojZIlyg05T9NP8nbhfpp/qJUHsxMMF8Wb8s5vNY/NM/K3NbrcZbJV22Ugi095Ggwb6ZF/mJmpuc32f5WwUwhPmDgVqgjdgCjPMsZ91TrTWmbKW1lbW0HUSVIQlhAxuSw5iupBhZnPTz5KQwCGtGPI8miYiViQ0y9yKNDmmqTmm4NBGsF1CoqIAAgl21ev2Z9fj9aG8IMpqDljx1bHVt4aYDYEjZytTplp8KOVFBLZOskGVK2MXc75YikLMMi4zGCvLT3HcTYIiS2GXMuBi4CblsVBIwWVXSEkOjLdXJiSdM8FZSXOASQ6wnslxrhpVjLUYsfppOZZWDB0dg4IlNerYh0tdVp3AokuDQkWGTlWOamAxkL3Q4Q9Dm2fuQt8PXf+8HhQa4eThXDP2uqcibFIrdfKmHsmskFOLwsHDeYpNmmKuewQp0We217gzkKO4bVB48bRBfbr1QHx6iJeNp1Y+TCHXUM9FgIqfULzfZbyayWITWaBchBbXHdVM3GrIuViGHV3pUDqGFlqiYQLjM+BDZXhmsuxyqbmei7RZnVOHnDYFwnEDmAlepIIH8lqQiN8v+HSuQg47iWJnZeKsWkye9wK+uDNDpOjk6fVPZhYWE0R48lCtuJAgvLXP8LgET+gsm8eYVcHeOfH8vrRibIorhYsikNy0fJMOz0ReWtMS9EtBa0JLv/8B2NVVmA==",
+            "color": "#67b8e7",
+            "fixed": false,
+            "id": "456ff9de-3008-4cbc-9ad8-6e6a2a0f463e",
+            "name": "差集 A−B · 长方体 1",
+            "parameters": {
+                "depth": 30,
+                "height": 30,
+                "radius": 15,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                0,
+                0,
+                0
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "solid",
+            "visible": true
+        }
+    ],
+    "format": "axisforge.project",
+    "mates": [
+    ],
+    "title": "未命名装配",
+    "units": "mm",
+    "version": 2
+}

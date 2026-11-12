@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     QApplication app(argc, argv);
     app.setProperty("requestedVsync", vsync);
     QApplication::setApplicationName("AxisForge CAD");
-    QApplication::setApplicationVersion("0.1.0");
+    QApplication::setApplicationVersion("0.2.0");
     QApplication::setOrganizationName("AxisForge");
     af::MainWindow window;
     window.show();

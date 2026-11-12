@@ -1,7 +1,9 @@
 #include "core/Constraints.h"
 #include "core/Geometry.h"
+#include "core/Kernel.h"
 #include "core/ProjectIO.h"
 #include "core/Scene.h"
+#include <BRepCheck_Analyzer.hxx>
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
@@ -20,6 +22,7 @@
             throw std::runtime_error(#condition);                                                            \
     } while (false)
 using namespace af;
+#include "StepFixtures.h"
 namespace {
 Mate mate(const Body &a, const Body &b, MateType type) {
     Mate m;
@@ -281,7 +284,7 @@ int main(int argc, char **argv) {
     });
     test("oversized input rejected before parsing", [] {
         Scene s;
-        CHECK(!deserialize(QByteArray(8 * 1024 * 1024 + 1, ' '), s));
+        CHECK(!deserialize(QByteArray(64 * 1024 * 1024 + 1, ' '), s));
     });
     test("atomic save/load and exports contain transformed triangles", [] {
         QTemporaryDir dir;
@@ -337,6 +340,7 @@ int main(int argc, char **argv) {
                 CHECK(mesh.vertices.size() % 3 == 0);
             }
     });
+#include "kernel_cases.inc"
     out << "\n" << passed << " passed, " << failed << " failed\n";
     return failed ? 1 : 0;
 }

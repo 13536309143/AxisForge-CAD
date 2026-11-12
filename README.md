@@ -16,7 +16,7 @@ C++17 · Qt Widgets · OpenGL 3.3 Core
 
 AxisForge 将参数化几何、装配约束、桌面交互与 GPU 绘制拆成独立层。创建模型后，可以修改尺寸、颜色和姿态；建立配合后，编辑基准零件会触发从动零件更新。求解失败时整次操作回滚，撤销/重做保存完整装配状态。
 
-当前版本是**参数图元与三角网格 CAD 原型**：具备真正可执行的建模和装配流程，但没有 B-Rep 实体内核、布尔运算、草图约束、拉伸/旋转特征、曲面拓扑或 STEP/IGES 导入。OBJ/STL 是离散网格输出，不能等同于精确实体交换。
+当前版本已接入 **Open CASCADE Technology（OCCT）实体内核**：基础图元为真实B-Rep实体，支持布尔并/差/交，以及保留主体名称、颜色和实例位置的STEP交换。OpenGL网格仅用于显示和网格导出。当前仍不包含草图约束、拉伸/旋转特征、IGES和完整特征历史。
 
 ## 已实现功能
 
@@ -28,6 +28,7 @@ AxisForge 将参数化几何、装配约束、桌面交互与 GPU 绘制拆成�
 | 事务与历史 | 约束失败回滚，最多100步撤销/重做，模型复制与级联删除相关配合 |
 | 三维交互 | 网格射线拾取、轨道视图、平移、缩放、适应全部、标准视图 |
 | 显示 | 光照、选中边线、地面网格、坐标轴、线框、正交/透视切换 |
+| 实体内核 | OCCT基础图元、拓扑校验、精确体积/面积、布尔并/差/交 |
 | 文件 | 版本化 `.afcad` JSON 项目，原子保存，严格字段校验 |
 | 导出 | 可见模型的 OBJ、ASCII STL，应用世界变换，单位 mm |
 | 几何信息 | 解析体积、表面积与显示三角形数量 |
@@ -44,17 +45,17 @@ Windows 打包版中双击 `start.cmd`，或运行 `run/AxisForgeCAD.exe`。保�
 
 ### 从源码构建
 
-需要 CMake 3.16+、支持 C++17 的编译器、Qt 5.15 或 Qt 6 的 Widgets 开发包，以及支持 OpenGL 3.3 的驱动。Qt 6 还需要 OpenGLWidgets 模块。
+需要 CMake 3.16+、支持 C++17 的编译器、Qt 5.15 或 Qt 6 的 Widgets 开发包，OCCT 7.6或更高的7.x版本（本机7.9.3），以及支持 OpenGL 3.3 的驱动。Qt 6 还需要 OpenGLWidgets 模块。
 
 Windows / Visual Studio 2022：
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/Qt/6.x/msvc2022_64"
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/Qt/6.x/msvc2022_64;C:/OCCT/opencascade-7.9.3-vc14-64"
 cmake --build build --config Release --parallel 1
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-请把 Qt 路径换成实际安装前缀；Qt 库和编译器须采用一致架构。当前本机打包环境使用 Anaconda 提供的 Qt 5.15.2 和 MSVC x64，`build.cmd` 默认指向此安装。更换安装可设置 `QT_ROOT`。测试和运行时还需确保 Qt DLL 与平台插件可找到；标准 Qt 安装可使用对应版本的 `windeployqt` 部署。
+请把 Qt 路径换成实际安装前缀；Qt 库和编译器须采用一致架构。当前本机打包环境使用 Anaconda 提供的 Qt 5.15.2 和 MSVC x64，`build.cmd` 默认指向此安装。更换Qt安装可设置 `QT_ROOT`；`OCCT_ROOT`设置为OCCT SDK前缀。本地已配置`deps/occt`开发文件，源码仓库不包含SDK。测试和运行时还需确保 Qt DLL 与平台插件可找到；标准 Qt 安装可使用对应版本的 `windeployqt` 部署。
 
 Linux / Qt 6 的构建方式：
 
@@ -111,6 +112,39 @@ ctest --test-dir build --output-on-failure
 
 有向循环被明确拒绝；固定从动模型若不满足配合，则拒绝操作；多个约束无法在容差内收敛时回滚。此算法服务于层级装配，不是通用非线性自由度求解器。求解失败不一定意味着数学上绝无解，也可能是当前算法无法收敛。
 
+
+## OCCT实体、布尔运算与STEP
+
+### 操作流程
+
+1. 创建两个模型，在属性面板设置相交位置。
+2. 点击工具栏“布尔运算”，或“实体”菜单的并集、差集、交集。
+3. 指定主对象A和工具对象B。差集严格为A减B，二者必须不同。
+4. 默认隐藏原对象但保留它们及其配合；结果是新的独立实体，可移动、复制、再次布尔。
+5. 从“文件”导出可见实体为STEP，或导入`.step/.stp`追加到场景。
+
+“实体 → 加载通孔实体示例”可直接观察长方体减圆柱的真实通孔。`examples/occt-hole.afcad`和`examples/occt-hole.step`提供对应项目与交换文件。
+
+### 几何语义
+
+- 基础图元参数修改后生成新的OCCT实体；体积、表面积和实体/面/边数量来自内核。
+- 布尔在世界坐标执行，结果保留A的位置/姿态参考系；多个不连接的实体可作为复合结果保留。
+- 无交集、完全相减、退化结果或无效拓扑会拒绝整次操作，原场景不变。
+- 布尔结果与STEP导入体是**独立B-Rep快照**。它们的图元尺寸控件只读，但仍可编辑名称、颜色、显示、位置、旋转，参与配合与后续布尔。
+- 修改原A/B不会自动重建已有布尔结果；这里不是完整参数化特征历史。一次布尔或STEP导入对应一条撤销记录。
+
+### 项目保存与STEP交换边界
+
+`.afcad` v2对独立实体内嵌压缩B-Rep，不依赖原STEP文件；单实体解压上限16 MiB。图元仍保存参数，因此旧v1项目可直接读取。STEP不保存AxisForge的配合关系、撤销栈或建模历史，完整项目请用`.afcad`。
+
+STEP通过XDE接口交换主体级名称和单一颜色，导出所有可见实体并应用世界变换。输入装配递归展开成独立实例，组合父子位置并归一化为mm，保留零件的最终空间位置；不保留可编辑的装配层级、面级多色、PMI或外部引用文件。导入时将模型原点重定位到体积中心，局部轴对齐世界坐标，方便后续拖动和旋转。
+
+当前只接受有效闭合实体或由实体构成的复合体；不把开放曲面或线框悄悄转换成实体。输入中遇到无效零件会拒绝整次导入。STEP输入上限64 MiB、最多300个展开实例、层级最多64，每体最多20000个面、显示网格最多100万个三角形。这些是资源边界，不是任意复杂文件的性能保证。
+
+Linux构建依赖可安装：`libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-visualization-dev libocct-ocaf-dev`。CMake自动适配7.6的TKXDESTEP与7.9的TKDESTEP工具包布局。
+
+官方依赖：[OCCT 7.9.3发布包](https://github.com/Open-Cascade-SAS/OCCT/releases/tag/V7_9_3)。Windows运行包包含所需动态库、STEP资源及许可说明；SDK、源码和运行包分开管理。
+
 ## 架构
 
 ```mermaid
@@ -119,7 +153,8 @@ flowchart TB
   DOC --> SCENE[Scene / Body / Mate]
   DOC --> SOLVE[有向装配求解器]
   SOLVE --> SCENE
-  SCENE --> GEO[参数几何离散化]
+  SCENE --> KERNEL[OCCT B-Rep 实体 / 布尔 / STEP]
+  KERNEL --> GEO[实体显示离散化]
   GEO --> GL[OpenGL VBO / VAO / GLSL]
   GEO --> PICK[射线与三角形拾取]
   SCENE --> IO[JSON 项目 / OBJ / STL]
@@ -128,7 +163,9 @@ flowchart TB
 | 模块 | 职责 |
 | --- | --- |
 | `src/core/Scene.*` | 数据模型、参数校验、解析体积与面积 |
-| `src/core/Geometry.*` | 五种图元网格、法线、包围盒、拾取 |
+| `src/core/Geometry.*` | OCCT网格缓存、包围盒、拾取 |
+| `src/core/Kernel.*` | 实体构造、拓扑校验、精确几何量、布尔运算、B-Rep持久化 |
+| `src/core/StepIO.cpp` | STEP/XDE名称颜色交换、装配实例展开、单位转换 |
 | `src/core/Constraints.*` | 约束残差、依赖排序、迭代求解与回滚 |
 | `src/core/ProjectIO.*` | 严格 JSON 解析、原子保存、网格导出 |
 | `src/app/Document.*` | 编辑事务、快照历史、复制和级联删除 |
@@ -142,8 +179,8 @@ flowchart TB
 
 `.afcad` 是 UTF-8 JSON，包含 `format`、`version`、`units`、模型与约束列表。旋转以 `[w,x,y,z]` 四元数保存，颜色使用 RGB 十六进制字符串。文件不包含机器绝对路径或外部执行指令。
 
-- schema version：1；长度单位：mm。
-- 单文件最大8 MiB，最多300个模型、1000个约束。
+- schema version：2（兼容读取version 1图元项目）；长度单位：mm。
+- 单文件最大64 MiB，最多300个模型、1000个约束。
 - 尺寸0.1～10000 mm，位置各分量绝对值不超过1000000 mm。
 - 细分8～128，圆环管半径小于主半径。
 - 拒绝重复 ID、无效引用、非有限数值、错误字段类型、不支持的版本和单位。
@@ -172,7 +209,7 @@ build/Release/AxisForgeCAD.exe --self-test build/test-artifacts
 1. 增加命名坐标系、面/边/孔配合基准及求解残差可视化。
 2. 引入 BVH 拾取、局部网格缓存和增量重建。
 3. 增加草图、拉伸、旋转特征与可编辑特征历史。
-4. 通过独立适配层接入实体几何内核，实现布尔运算和 STEP。
+4. 扩展面/边级选择、IGES交换及更丰富的曲面建模。
 5. 增加通用约束求解、自由度诊断、碰撞检测与装配动画。
 
 这些属于后续方向，不是当前已经实现的功能。

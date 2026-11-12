@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Qt and software rendering dependencies
-        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev libqt6opengl6-dev ninja-build xvfb libgl1-mesa-dri
+        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev libqt6opengl6-dev ninja-build xvfb libgl1-mesa-dri libocct-data-exchange-dev libocct-modeling-algorithms-dev libocct-modeling-data-dev libocct-visualization-dev libocct-ocaf-dev
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build

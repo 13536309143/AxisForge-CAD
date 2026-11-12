@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 namespace af {
+enum class BooleanOp;
 class Document : public QObject {
     Q_OBJECT
   public:
@@ -20,6 +21,9 @@ class Document : public QObject {
     QString addBody(Shape shape);
     void removeBody(const QString &id);
     QString duplicateBody(const QString &id);
+    QString booleanOperation(const QString &a, const QString &b, BooleanOp op, bool hideOperands = true,
+                             QString *error = nullptr);
+    bool importStepFile(const QString &path, QString *error = nullptr);
     void beginMove(const QString &id);
     void previewMove(const QString &id, const QVector3D &position);
     void finishMove(bool commit);

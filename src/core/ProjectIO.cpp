@@ -1,6 +1,7 @@
 #include "ProjectIO.h"
 #include "Constraints.h"
 #include "Geometry.h"
+#include "Kernel.h"
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -59,20 +60,23 @@ QByteArray serialize(const Scene &s) {
     for (const auto &b : s.bodies) {
         const auto &p = b.params;
         auto q = b.rotation;
-        bodies.append(QJsonObject{{"id", b.id},
-                                  {"name", b.name},
-                                  {"shape", shapeKey(b.shape)},
-                                  {"parameters", QJsonObject{{"width", p.width},
-                                                             {"depth", p.depth},
-                                                             {"height", p.height},
-                                                             {"radius", p.radius},
-                                                             {"tubeRadius", p.tubeRadius},
-                                                             {"segments", p.segments}}},
-                                  {"position", vec(b.position)},
-                                  {"rotation", QJsonArray{q.scalar(), q.x(), q.y(), q.z()}},
-                                  {"color", b.color.name(QColor::HexRgb)},
-                                  {"visible", b.visible},
-                                  {"fixed", b.fixed}});
+        QJsonObject object{{"id", b.id},
+                           {"name", b.name},
+                           {"shape", shapeKey(b.shape)},
+                           {"parameters", QJsonObject{{"width", p.width},
+                                                      {"depth", p.depth},
+                                                      {"height", p.height},
+                                                      {"radius", p.radius},
+                                                      {"tubeRadius", p.tubeRadius},
+                                                      {"segments", p.segments}}},
+                           {"position", vec(b.position)},
+                           {"rotation", QJsonArray{q.scalar(), q.x(), q.y(), q.z()}},
+                           {"color", b.color.name(QColor::HexRgb)},
+                           {"visible", b.visible},
+                           {"fixed", b.fixed}};
+        if (b.shape == Shape::Solid)
+            object["brep"] = QString::fromLatin1(encodeBrep(b));
+        bodies.append(object);
     }
     for (const auto &m : s.mates)
         mates.append(QJsonObject{{"id", m.id},
@@ -84,7 +88,7 @@ QByteArray serialize(const Scene &s) {
                                  {"distance", m.distance},
                                  {"enabled", m.enabled}});
     return QJsonDocument(QJsonObject{{"format", "axisforge.project"},
-                                     {"version", 1},
+                                     {"version", 2},
                                      {"units", "mm"},
                                      {"title", s.title},
                                      {"bodies", bodies},
@@ -97,16 +101,16 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             *error = s;
         return false;
     };
-    if (bytes.size() > 8 * 1024 * 1024)
-        return fail(QStringLiteral("项目文件超过 8 MiB 限制。"));
+    if (bytes.size() > 64 * 1024 * 1024)
+        return fail(QStringLiteral("项目文件超过 64 MiB 限制。"));
     QJsonParseError parse;
     auto doc = QJsonDocument::fromJson(bytes, &parse);
     if (parse.error != QJsonParseError::NoError || !doc.isObject())
         return fail(QStringLiteral("JSON 项目格式无效：") + parse.errorString());
     try {
         const auto root = doc.object();
-        if (string(root, "format") != "axisforge.project" || integer(root, "version") != 1 ||
-            string(root, "units") != "mm")
+        if (string(root, "format") != "axisforge.project" ||
+            (integer(root, "version") != 1 && integer(root, "version") != 2) || string(root, "units") != "mm")
             return fail(QStringLiteral("不支持的项目格式、版本或单位。"));
         if (!root["bodies"].isArray() || !root["mates"].isArray())
             return fail(QStringLiteral("项目缺少模型或约束列表。"));
@@ -121,7 +125,8 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             Body b;
             b.id = string(o, "id");
             b.name = string(o, "name");
-            int shape = QStringList{"box", "sphere", "cylinder", "cone", "torus"}.indexOf(string(o, "shape"));
+            int shape = QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid"}.indexOf(
+                string(o, "shape"));
             if (shape < 0)
                 throw std::runtime_error("Unknown shape");
             b.shape = Shape(shape);
@@ -140,6 +145,13 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             b.color = QColor(string(o, "color"));
             b.visible = boolean(o, "visible");
             b.fixed = boolean(o, "fixed");
+            if (b.shape == Shape::Solid) {
+                if (integer(root, "version") < 2)
+                    throw std::runtime_error("实体需要项目格式version 2。");
+                QString why;
+                if (!decodeBrep(string(o, "brep").toLatin1(), b, &why))
+                    throw std::runtime_error(why.toStdString());
+            }
             result.bodies << b;
         }
         for (auto item : root["mates"].toArray()) {
@@ -194,9 +206,9 @@ bool loadProject(const QString &path, Scene &scene, QString *error) {
             *error = file.errorString();
         return false;
     }
-    if (file.size() > 8 * 1024 * 1024) {
+    if (file.size() > 64 * 1024 * 1024) {
         if (error)
-            *error = QStringLiteral("项目文件超过 8 MiB 限制。");
+            *error = QStringLiteral("项目文件超过 64 MiB 限制。");
         return false;
     }
     return deserialize(file.readAll(), scene, error);

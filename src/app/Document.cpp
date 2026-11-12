@@ -1,5 +1,6 @@
 #include "Document.h"
 #include "core/Constraints.h"
+#include "core/Kernel.h"
 #include "core/ProjectIO.h"
 #include <QUndoCommand>
 #include <QUuid>
@@ -89,6 +90,48 @@ void Document::beginMove(const QString &id) {
         return;
     movingId_ = id;
     moveBefore_ = std::make_unique<Scene>(scene_);
+}
+QString Document::booleanOperation(const QString &a, const QString &b, BooleanOp op, bool hideOperands,
+                                   QString *error) {
+    finishMove(false);
+    auto left = scene_.find(a), right = scene_.find(b);
+    if (!left || !right) {
+        if (error)
+            *error = QStringLiteral("请选择两个存在的模型。");
+        return {};
+    }
+    Body result;
+    QString why;
+    if (!booleanBody(*left, *right, op, result, &why)) {
+        if (error)
+            *error = why;
+        emit rejected(why);
+        return {};
+    }
+    const QString aid = a, bid = b;
+    if (!edit(
+            QStringLiteral("OCCT 布尔运算"),
+            [&](Scene &s) {
+                if (hideOperands) {
+                    s.find(aid)->visible = false;
+                    s.find(bid)->visible = false;
+                }
+                s.bodies << result;
+            },
+            error))
+        return {};
+    return result.id;
+}
+bool Document::importStepFile(const QString &path, QString *error) {
+    QVector<Body> imported;
+    QString why;
+    if (!importStep(path, imported, &why)) {
+        if (error)
+            *error = why;
+        emit rejected(why);
+        return false;
+    }
+    return edit(QStringLiteral("导入 STEP 实体"), [&](Scene &s) { s.bodies += imported; }, error);
 }
 void Document::previewMove(const QString &id, const QVector3D &position) {
     if (!moveBefore_ || id != movingId_)

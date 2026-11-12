@@ -8,3 +8,4 @@ test-artifacts/
 *.obj
 *.zip
 .vs/
+deps/

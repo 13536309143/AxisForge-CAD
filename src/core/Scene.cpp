@@ -1,7 +1,9 @@
 #include "Scene.h"
+#include "Kernel.h"
 #include <QSet>
 #include <QStringList>
 #include <QUuid>
+#include <Standard_Failure.hxx>
 #include <cmath>
 
 namespace af {
@@ -9,11 +11,11 @@ namespace {
 constexpr double pi = 3.14159265358979323846;
 }
 QString shapeKey(Shape s) {
-    return QStringList{"box", "sphere", "cylinder", "cone", "torus"}.value(int(s));
+    return QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid"}.value(int(s));
 }
 QString shapeName(Shape s) {
     return QStringList{QStringLiteral("长方体"), QStringLiteral("球体"), QStringLiteral("圆柱"),
-                       QStringLiteral("圆锥"), QStringLiteral("圆环")}
+                       QStringLiteral("圆锥"),   QStringLiteral("圆环"), QStringLiteral("OCCT 实体")}
         .value(int(s));
 }
 QString mateKey(MateType t) {
@@ -66,7 +68,7 @@ bool Scene::validate(QString *error) const {
         if (b.id.isEmpty() || b.id.size() > 80 || ids.contains(b.id))
             return fail(QStringLiteral("模型 ID 缺失或重复。"));
         ids.insert(b.id);
-        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 4 ||
+        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 5 ||
             !b.color.isValid())
             return fail(QStringLiteral("模型名称、类型或颜色无效。"));
         for (double value :
@@ -86,6 +88,13 @@ bool Scene::validate(QString *error) const {
                 return fail(QStringLiteral("旋转包含无效数值。"));
         if (std::abs(q.length() - 1.0f) > 0.002f)
             return fail(QStringLiteral("旋转四元数必须归一化。"));
+        try {
+            solidData(b);
+        } catch (const Standard_Failure &e) {
+            return fail(QString::fromUtf8(e.GetMessageString()));
+        } catch (const std::exception &e) {
+            return fail(QString::fromUtf8(e.what()));
+        }
     }
     for (const auto &m : mates) {
         if (m.id.isEmpty() || m.id.size() > 80 || mateIds.contains(m.id))
@@ -108,7 +117,7 @@ Body makeBody(Shape shape, int ordinal) {
     b.name = shapeName(shape) + QString(" %1").arg(ordinal);
     const QColor colors[] = {QColor("#67b8e7"), QColor("#e9af68"), QColor("#73d0b5"), QColor("#bd9be8"),
                              QColor("#e58fa7")};
-    b.color = colors[int(shape)];
+    b.color = colors[int(shape) % 5];
     return b;
 }
 Scene demoScene() {
@@ -161,35 +170,9 @@ Scene demoScene() {
     return s;
 }
 double volume(const Body &b) {
-    const auto &p = b.params;
-    switch (b.shape) {
-    case Shape::Box:
-        return p.width * p.depth * p.height;
-    case Shape::Sphere:
-        return 4 * pi * p.radius * p.radius * p.radius / 3;
-    case Shape::Cylinder:
-        return pi * p.radius * p.radius * p.height;
-    case Shape::Cone:
-        return pi * p.radius * p.radius * p.height / 3;
-    case Shape::Torus:
-        return 2 * pi * pi * p.radius * p.tubeRadius * p.tubeRadius;
-    }
-    return 0;
+    return solidData(b)->volume;
 }
 double surfaceArea(const Body &b) {
-    const auto &p = b.params;
-    switch (b.shape) {
-    case Shape::Box:
-        return 2 * (p.width * p.depth + p.width * p.height + p.depth * p.height);
-    case Shape::Sphere:
-        return 4 * pi * p.radius * p.radius;
-    case Shape::Cylinder:
-        return 2 * pi * p.radius * (p.radius + p.height);
-    case Shape::Cone:
-        return pi * p.radius * (p.radius + std::hypot(p.radius, p.height));
-    case Shape::Torus:
-        return 4 * pi * pi * p.radius * p.tubeRadius;
-    }
-    return 0;
+    return solidData(b)->area;
 }
 } // namespace af
