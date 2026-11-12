@@ -4,6 +4,7 @@
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
@@ -17,6 +18,7 @@
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
+#include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
 #include <Poly_Triangulation.hxx>
 #include <QCoreApplication>
@@ -99,6 +101,12 @@ std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &input, int segm
     }
     auto data = std::make_shared<SolidData>();
     data->shape = shape;
+    Bnd_Box bounds;
+    BRepBndLib::AddOptimal(shape, bounds, Standard_False, Standard_False);
+    double x0, y0, z0, x1, y1, z1;
+    bounds.Get(x0, y0, z0, x1, y1, z1);
+    data->bounds.include({float(x0), float(y0), float(z0)});
+    data->bounds.include({float(x1), float(y1), float(z1)});
     data->solids = solids;
     data->faces = faces;
     data->edges = countShapes(shape, TopAbs_EDGE);

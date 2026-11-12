@@ -3,6 +3,7 @@
 #include <QKeyEvent>
 #include <QOpenGLContext>
 #include <QPainter>
+#include <QStringList>
 #include <QSurfaceFormat>
 #include <QTimer>
 #include <cmath>
@@ -28,6 +29,13 @@ Viewport::Viewport(QWidget *parent) : QOpenGLWidget(parent) {
 }
 Viewport::~Viewport() {
     cleanup();
+}
+void Viewport::setDisplayMode(DisplayMode mode) {
+    if (int(mode) < 0 || int(mode) > 3 || mode == displayMode_)
+        return;
+    displayMode_ = mode;
+    update();
+    emit displayModeChanged(int(mode));
 }
 void Viewport::setContinuousRendering(bool enabled) {
     continuous_ = enabled;
@@ -55,7 +63,7 @@ Viewport::Metrics Viewport::metrics() const {
     for (const auto &gpu : meshes_) {
         m.vertices += gpu->count;
         m.triangles += gpu->count / 3;
-        m.gpuBufferBytes += quint64(gpu->count + gpu->edgeCount) * sizeof(Vertex);
+        m.gpuBufferBytes += quint64(gpu->allocatedVertices) * sizeof(Vertex);
         const auto *b = scene_.find(gpu->id);
         if (b && b->visible) {
             m.visibleVertices += gpu->count;
@@ -136,6 +144,7 @@ std::unique_ptr<Viewport::GpuMesh> Viewport::upload(const QVector<Vertex> &verti
     gpu->id = id;
     gpu->count = count;
     gpu->edgeCount = edges;
+    gpu->allocatedVertices = vertices.size();
     if (!gpu->vao.create() || !gpu->buffer.create()) {
         error_ = QStringLiteral("OpenGL 缓冲创建失败。");
         return {};
@@ -160,9 +169,26 @@ void Viewport::rebuild() {
         auto v = topology->mesh.vertices;
         int count = v.size();
         v += topology->edgeVertices;
+        for (int i = 0; i < count; i += 3) {
+            auto a = v[i], b = v[i + 1], c = v[i + 2];
+            v << a << b << b << c << c << a;
+        }
+        const auto bounds = topology->bounds;
+        QVector3D corners[8];
+        for (int i = 0; i < 8; ++i)
+            corners[i] = {i & 1 ? bounds.max.x() : bounds.min.x(), i & 2 ? bounds.max.y() : bounds.min.y(),
+                          i & 4 ? bounds.max.z() : bounds.min.z()};
+        for (int i = 0; i < 8; ++i)
+            for (int axis = 0; axis < 3; ++axis)
+                if (!(i & (1 << axis)))
+                    v << Vertex{corners[i], {0, 0, 1}} << Vertex{corners[i | (1 << axis)], {0, 0, 1}};
         auto gpu = upload(v, count, topology->edgeVertices.size(), body.id);
-        if (gpu)
+        if (gpu) {
+            gpu->triangleEdgeCount = count * 2;
+            gpu->boundsCount = 24;
+            gpu->bounds = bounds;
             meshes_.push_back(std::move(gpu));
+        }
     }
     QVector<Vertex> lines;
     for (int i = -20; i <= 20; ++i) {
@@ -248,6 +274,44 @@ QString Viewport::pickAt(const QPoint &point) const {
     float x = 2.0f * point.x() / qMax(1, width()) - 1, y = 1 - 2.0f * point.y() / qMax(1, height());
     auto a = inv * QVector4D(x, y, -1, 1), b = inv * QVector4D(x, y, 1, 1);
     auto start = a.toVector3DAffine(), end = b.toVector3DAffine();
+    if (displayMode_ == DisplayMode::Bounds) {
+        float nearest = std::numeric_limits<float>::max();
+        QString id;
+        const auto direction = (end - start).normalized();
+        for (const auto &body : scene_.bodies) {
+            if (!body.visible)
+                continue;
+            auto inverse = body.matrix().inverted();
+            auto origin = inverse.map(start), ray = inverse.mapVector(direction);
+            const auto bounds = solidData(body)->bounds;
+            float enter = 0, exit = std::numeric_limits<float>::max();
+            bool hit = true;
+            for (int axis = 0; axis < 3; ++axis) {
+                if (std::abs(ray[axis]) < 1e-8f) {
+                    if (origin[axis] < bounds.min[axis] || origin[axis] > bounds.max[axis]) {
+                        hit = false;
+                        break;
+                    }
+                    continue;
+                }
+                float first = (bounds.min[axis] - origin[axis]) / ray[axis],
+                      last = (bounds.max[axis] - origin[axis]) / ray[axis];
+                if (first > last)
+                    std::swap(first, last);
+                enter = qMax(enter, first);
+                exit = qMin(exit, last);
+                if (exit < enter) {
+                    hit = false;
+                    break;
+                }
+            }
+            if (hit && enter < nearest) {
+                nearest = enter;
+                id = body.id;
+            }
+        }
+        return id;
+    }
     return pick(scene_, start, end - start).id;
 }
 void Viewport::paintGL() {
@@ -289,19 +353,34 @@ void Viewport::paintGL() {
             program_->setUniformValue("model", model);
             program_->setUniformValue("normalMatrix", model.normalMatrix());
             program_->setUniformValue("selected", int(b->id == selected_));
-            program_->setUniformValue("unlit", int(wireframe_));
+            const bool linesOnly =
+                displayMode_ == DisplayMode::Wireframe || displayMode_ == DisplayMode::Bounds;
+            program_->setUniformValue("unlit", int(linesOnly));
             program_->setUniformValue(
                 "objectColor",
                 QVector3D(float(b->color.redF()), float(b->color.greenF()), float(b->color.blueF())));
             gpu->vao.bind();
-            if (wireframe_)
+            if (displayMode_ == DisplayMode::Bounds) {
+                if (b->id == selected_)
+                    program_->setUniformValue("objectColor", QVector3D(1.0f, 0.73f, 0.32f));
+                glDrawArrays(GL_LINES, gpu->count + gpu->edgeCount + gpu->triangleEdgeCount,
+                             gpu->boundsCount);
+            } else if (displayMode_ == DisplayMode::Wireframe) {
+                if (b->id == selected_)
+                    program_->setUniformValue("objectColor", QVector3D(1.0f, 0.73f, 0.32f));
                 glDrawArrays(GL_LINES, gpu->count, gpu->edgeCount);
-            else {
+            } else {
                 glEnable(GL_POLYGON_OFFSET_FILL);
                 glPolygonOffset(1, 1);
                 glDrawArrays(GL_TRIANGLES, 0, gpu->count);
                 glDisable(GL_POLYGON_OFFSET_FILL);
-                if (b->id == selected_) {
+                if (displayMode_ == DisplayMode::Triangles) {
+                    program_->setUniformValue("unlit", 1);
+                    program_->setUniformValue("objectColor", b->id == selected_
+                                                                 ? QVector3D(1.0f, 0.73f, 0.32f)
+                                                                 : QVector3D(0.08f, 0.14f, 0.22f));
+                    glDrawArrays(GL_LINES, gpu->count + gpu->edgeCount, gpu->triangleEdgeCount);
+                } else if (b->id == selected_) {
                     program_->setUniformValue("unlit", 1);
                     program_->setUniformValue("objectColor", QVector3D(1.0f, 0.73f, 0.32f));
                     glDrawArrays(GL_LINES, gpu->count, gpu->edgeCount);
@@ -318,6 +397,9 @@ void Viewport::paintGL() {
     p.drawText(22, 30,
                orthographic_ ? QStringLiteral("ORTHOGRAPHIC  /  正交视图")
                              : QStringLiteral("PERSPECTIVE  /  透视视图"));
+    const QStringList modeNames = {QStringLiteral("常规模式"), QStringLiteral("三角面模式"),
+                                   QStringLiteral("包围盒模式"), QStringLiteral("拓扑线框模式")};
+    p.drawText(22, 50, modeNames[int(displayMode_)]);
     p.drawText(22, height() - 22,
                QStringLiteral("左键选择/拖动模型 · Delete 删除 · Esc 取消拖动 · 右键旋转 · 中键平移"));
     if (!error_.isEmpty()) {

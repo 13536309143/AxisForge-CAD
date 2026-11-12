@@ -6,6 +6,7 @@ enum class BooleanOp { Fuse, Cut, Common };
 struct SolidData {
     TopoDS_Shape shape;
     Mesh mesh;
+    Bounds bounds;
     QVector<Vertex> edgeVertices;
     QByteArray brep;
     double volume = 0, area = 0;

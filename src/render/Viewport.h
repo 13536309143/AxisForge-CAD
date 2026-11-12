@@ -20,9 +20,14 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     void setSelection(const QString &id);
     void fitAll();
     void setView(int preset);
+    enum class DisplayMode { Normal, Triangles, Bounds, Wireframe };
+    Q_ENUM(DisplayMode)
+    void setDisplayMode(DisplayMode mode);
+    DisplayMode displayMode() const {
+        return displayMode_;
+    }
     void setWireframe(bool enabled) {
-        wireframe_ = enabled;
-        update();
+        setDisplayMode(enabled ? DisplayMode::Wireframe : DisplayMode::Normal);
     }
     void setOrthographic(bool enabled) {
         orthographic_ = enabled;
@@ -56,6 +61,7 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     void moveFinished(bool commit);
     void deleteRequested();
     void interactionMessage(const QString &message);
+    void displayModeChanged(int mode);
 
   protected:
     void initializeGL() override;
@@ -71,7 +77,8 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
         QString id;
         QOpenGLBuffer buffer;
         QOpenGLVertexArrayObject vao;
-        int count = 0, edgeCount = 0;
+        int count = 0, edgeCount = 0, triangleEdgeCount = 0, boundsCount = 0, allocatedVertices = 0;
+        Bounds bounds;
         GpuMesh() : buffer(QOpenGLBuffer::VertexBuffer) {}
     };
     void cleanup();
@@ -83,7 +90,8 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     bool dragPoint(const QPoint &point, QVector3D &world) const;
     Scene scene_;
     QString selected_, renderer_, error_;
-    bool dirty_ = true, wireframe_ = false, orthographic_ = false;
+    bool dirty_ = true, orthographic_ = false;
+    DisplayMode displayMode_ = DisplayMode::Normal;
     float yaw_ = 45, pitch_ = 30, distance_ = 210;
     QVector3D target_ = {0, 0, 30};
     QPoint lastMouse_, pressMouse_;

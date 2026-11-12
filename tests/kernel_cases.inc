@@ -35,6 +35,14 @@ for (int operation = 0; operation < 3; ++operation)
         CHECK(!tessellate(result).vertices.isEmpty());
         CHECK(std::abs(volume(a) - 8000) < 1e-5);
     });
+test("display bounds use OCCT geometry rather than coarse mesh", [] {
+    auto sphere = makeBody(Shape::Sphere);
+    sphere.params.segments = 8;
+    auto data = solidData(sphere);
+    CHECK(data->bounds.valid);
+    CHECK(vectorsClose(data->bounds.min, {-15, -15, -15}, 0.001f));
+    CHECK(vectorsClose(data->bounds.max, {15, 15, 15}, 0.001f));
+});
 test("OCCT through hole removes cylinder volume", [] {
     auto block = makeBody(Shape::Box), drill = makeBody(Shape::Cylinder);
     block.params.width = block.params.depth = 40;

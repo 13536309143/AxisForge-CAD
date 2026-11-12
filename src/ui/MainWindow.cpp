@@ -4,6 +4,7 @@
 #include "core/Kernel.h"
 #include "core/ProjectIO.h"
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColorDialog>
@@ -249,11 +250,37 @@ void MainWindow::buildActions() {
     for (int i = 0; i < 4; ++i)
         action(viewMenu, labels[i], QString::number(i + 1), QString("view%1").arg(i),
                [this, i] { viewport_->setView(i); });
-    auto *wire = viewMenu->addAction(QStringLiteral("线框显示"));
-    wire->setObjectName("wireframe");
-    wire->setCheckable(true);
-    connect(wire, &QAction::toggled, viewport_, &Viewport::setWireframe);
-    toolbar->addAction(wire);
+    auto *displayMenu = viewMenu->addMenu(QStringLiteral("显示模式"));
+    auto *modes = new QActionGroup(this);
+    modes->setExclusive(true);
+    auto *modePicker = new QComboBox;
+    modePicker->setObjectName("displayModePicker");
+    modePicker->setToolTip(
+        QStringLiteral("常规：着色实体；三角面：着色+"
+                       "三角剖分边；包围盒：局部包围盒随模型旋转；线框：真实拓扑边。Alt+1～4切换。"));
+    const QStringList modeLabels = {QStringLiteral("常规模式"), QStringLiteral("三角面模式"),
+                                    QStringLiteral("包围盒模式"), QStringLiteral("线框模式")};
+    for (int i = 0; i < 4; ++i) {
+        auto *a = displayMenu->addAction(modeLabels[i]);
+        a->setObjectName(i == 3 ? QStringLiteral("wireframe") : QString("displayMode%1").arg(i));
+        a->setCheckable(true);
+        modes->addAction(a);
+        a->setShortcut(QKeySequence(QString("Alt+%1").arg(i + 1)));
+        a->setData(i);
+        if (i == 0)
+            a->setChecked(true);
+        connect(a, &QAction::triggered, this,
+                [this, i] { viewport_->setDisplayMode(Viewport::DisplayMode(i)); });
+        modePicker->addItem(modeLabels[i]);
+    }
+    toolbar->addWidget(modePicker);
+    connect(modePicker, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int i) { viewport_->setDisplayMode(Viewport::DisplayMode(i)); });
+    connect(viewport_, &Viewport::displayModeChanged, this, [modePicker, modes](int index) {
+        modePicker->setCurrentIndex(index);
+        for (auto *a : modes->actions())
+            a->setChecked(a->data().toInt() == index);
+    });
     auto *ortho = viewMenu->addAction(QStringLiteral("正交投影"));
     ortho->setObjectName("orthographic");
     ortho->setCheckable(true);
@@ -948,7 +975,7 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(counts.instances == 1 && counts.visibleInstances == 1 && counts.triangles == 12 &&
                   counts.vertices == 36,
               "scene metrics count box instances triangles and submitted vertices");
-        check(counts.gpuBufferBytes == quint64(36 + 24 + 170) * sizeof(Vertex),
+        check(counts.gpuBufferBytes == quint64(36 + 24 + 72 + 24 + 170) * sizeof(Vertex),
               "GPU buffer payload includes triangle edges and grid");
         const auto memory = processMemory();
 #if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
@@ -1051,10 +1078,51 @@ int MainWindow::runSelfTest(const QString &directory) {
         QApplication::sendEvent(viewport_, &move);
         check(cameraSignals > 0, "orbit mouse handler");
         disconnect(connection);
-        auto *wire = findChild<QAction *>("wireframe");
-        wire->setChecked(true);
-        QApplication::processEvents();
-        wire->setChecked(false);
+        Scene sphereScene;
+        auto sphere = makeBody(Shape::Sphere);
+        sphereScene.bodies << sphere;
+        document_.replace(sphereScene);
+        selectBody(sphere.id);
+        viewport_->setView(1);
+        viewport_->fitAll();
+        viewport_->grabFramebuffer();
+        const auto corner = viewport_->projectPoint({12, 0, 12});
+        check(viewport_->pickAt(corner).isEmpty(), "sphere corner misses normal geometry");
+        auto *picker = findChild<QComboBox *>("displayModePicker");
+        check(picker && picker->count() == 4, "four display modes exposed in toolbar");
+        const auto baselineMetrics = viewport_->metrics();
+        const int historyIndex = document_.history()->index();
+        QImage previous;
+        for (int mode = 0; mode < 4; ++mode) {
+            auto *action = findChild<QAction *>(mode == 3 ? QStringLiteral("wireframe")
+                                                          : QString("displayMode%1").arg(mode));
+            action->trigger();
+            check(picker->currentIndex() == mode && int(viewport_->displayMode()) == mode,
+                  "menu and toolbar mode synchronize " + QString::number(mode));
+            auto frame = viewport_->grabFramebuffer();
+            check(!frame.isNull(), "display mode renders " + QString::number(mode));
+            check(frame.save(directory + QString("/mode-%1.png").arg(mode)),
+                  "display mode screenshot " + QString::number(mode));
+            if (!previous.isNull())
+                check(frame != previous, "display modes have different images " + QString::number(mode));
+            previous = frame;
+            const auto metrics = viewport_->metrics();
+            check(metrics.vertices == baselineMetrics.vertices &&
+                      metrics.triangles == baselineMetrics.triangles &&
+                      metrics.gpuBufferBytes == baselineMetrics.gpuBufferBytes,
+                  "mode switching preserves geometry and allocations " + QString::number(mode));
+            if (mode == 2)
+                check(viewport_->pickAt(corner) == sphere.id,
+                      "bounding box can be picked outside sphere silhouette");
+        }
+        check(document_.history()->index() == historyIndex, "display modes do not change document history");
+        document_.edit("Hide sphere", [&](Scene &scene) { scene.bodies[0].visible = false; });
+        picker->setCurrentIndex(2);
+        check(viewport_->pickAt(corner).isEmpty(), "hidden bounding boxes cannot be picked");
+        picker->setCurrentIndex(0);
+        check(viewport_->displayMode() == Viewport::DisplayMode::Normal &&
+                  findChild<QAction *>("displayMode0")->isChecked(),
+              "toolbar returns to normal mode");
         auto *ortho = findChild<QAction *>("orthographic");
         ortho->setChecked(true);
         QApplication::processEvents();
