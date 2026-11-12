@@ -90,11 +90,16 @@ QByteArray serialize(const Scene &s) {
                                  {"sourceAxis", m.sourceAxis},
                                  {"targetAxis", m.targetAxis},
                                  {"distance", m.distance},
+                                 {"angle", m.angle},
+                                 {"offset", m.offset},
                                  {"enabled", m.enabled}});
     return QJsonDocument(
                QJsonObject{{"format", "axisforge.project"},
-                           {"version", std::any_of(s.bodies.begin(), s.bodies.end(),
-                                                   [](const Body &b) { return b.shape == Shape::Mesh; })
+                           {"version", std::any_of(s.mates.begin(), s.mates.end(),
+                                                   [](const Mate &m) { return int(m.type) >= 4; })
+                                           ? 4
+                                       : std::any_of(s.bodies.begin(), s.bodies.end(),
+                                                     [](const Body &b) { return b.shape == Shape::Mesh; })
                                            ? 3
                                            : 2},
                            {"units", "mm"},
@@ -119,7 +124,7 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
         const auto root = doc.object();
         if (string(root, "format") != "axisforge.project" ||
             (integer(root, "version") != 1 && integer(root, "version") != 2 &&
-             integer(root, "version") != 3) ||
+             integer(root, "version") != 3 && integer(root, "version") != 4) ||
             string(root, "units") != "mm")
             return fail(QStringLiteral("不支持的项目格式、版本或单位。"));
         if (!root["bodies"].isArray() || !root["mates"].isArray())
@@ -181,14 +186,22 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             m.id = string(o, "id");
             m.source = string(o, "source");
             m.target = string(o, "target");
-            int type =
-                QStringList{"coaxial", "parallel", "perpendicular", "distance"}.indexOf(string(o, "type"));
+            int type = QStringList{"coaxial",    "parallel", "perpendicular", "distance",
+                                   "coincident", "angle",    "axialOffset"}
+                           .indexOf(string(o, "type"));
             if (type < 0)
                 throw std::runtime_error("Unknown mate");
             m.type = MateType(type);
             m.sourceAxis = integer(o, "sourceAxis");
             m.targetAxis = integer(o, "targetAxis");
             m.distance = number(o, "distance");
+            if (type >= 4 && integer(root, "version") < 4)
+                throw std::runtime_error("扩展配合需要项目 version 4。");
+            m.angle = o.contains("angle") ? number(o, "angle") : 90;
+            m.offset = o.contains("offset") ? number(o, "offset") : 0;
+            if ((m.type == MateType::Angle && !o.contains("angle")) ||
+                (m.type == MateType::AxialOffset && !o.contains("offset")))
+                throw std::runtime_error("扩展配合缺少参数。");
             m.enabled = boolean(o, "enabled");
             result.mates << m;
         }

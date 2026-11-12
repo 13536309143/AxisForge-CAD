@@ -20,11 +20,14 @@ QString shapeName(Shape s) {
         .value(int(s));
 }
 QString mateKey(MateType t) {
-    return QStringList{"coaxial", "parallel", "perpendicular", "distance"}.value(int(t));
+    return QStringList{"coaxial",    "parallel", "perpendicular", "distance",
+                       "coincident", "angle",    "axialOffset"}
+        .value(int(t));
 }
 QString mateName(MateType t) {
-    return QStringList{QStringLiteral("同轴"), QStringLiteral("平行"), QStringLiteral("垂直"),
-                       QStringLiteral("中心距离")}
+    return QStringList{QStringLiteral("同轴"),     QStringLiteral("平行"),     QStringLiteral("垂直"),
+                       QStringLiteral("中心距离"), QStringLiteral("原点重合"), QStringLiteral("指定夹角"),
+                       QStringLiteral("沿轴偏移")}
         .value(int(t));
 }
 QMatrix4x4 Body::matrix() const {
@@ -110,10 +113,13 @@ bool Scene::validate(QString *error) const {
         if (!ids.contains(m.source) || !ids.contains(m.target) || m.source == m.target)
             return fail(QStringLiteral("约束引用不存在的模型或自身。"));
         if (m.sourceAxis < 0 || m.sourceAxis > 2 || m.targetAxis < 0 || m.targetAxis > 2 || int(m.type) < 0 ||
-            int(m.type) > 3)
+            int(m.type) > 6)
             return fail(QStringLiteral("约束类型或轴无效。"));
         if (!finite(m.distance) || m.distance < 0 || m.distance > 1000000)
             return fail(QStringLiteral("约束距离无效。"));
+        if (!finite(m.angle) || m.angle < 0 || m.angle > 180 || !finite(m.offset) ||
+            std::abs(m.offset) > 1000000)
+            return fail(QStringLiteral("夹角需在 0～180°，轴向偏移需在 ±1000000 mm。"));
     }
     return true;
 }

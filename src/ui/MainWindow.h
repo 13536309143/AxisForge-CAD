@@ -8,7 +8,9 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QPushButton>
+class QDialog;
 #include <QSpinBox>
 #include <QTreeWidget>
 namespace af {
@@ -38,6 +40,11 @@ class MainWindow final : public QMainWindow {
     void showProperties();
     void applyProperties();
     void addMateDialog();
+    void openMateEditor(const QString &id);
+    void selectMate(const QString &id);
+    QPointer<QDialog> mateEditor_;
+    QLabel *mateInfo_ = nullptr;
+    QString mateSelection_;
     void booleanDialog(BooleanOp op);
     void deleteMate();
     void deleteSelection();

@@ -265,6 +265,10 @@ void MainWindow::buildActions() {
     auto *mate =
         action(assembly, QStringLiteral("添加配合…"), "Ctrl+M", "addMate", [this] { addMateDialog(); });
     toolbar->addAction(mate);
+    action(assembly, QStringLiteral("编辑选中配合…"), "Ctrl+Shift+M", "editMate", [this] {
+        if (!mateSelection_.isEmpty())
+            openMateEditor(mateSelection_);
+    });
     action(assembly, QStringLiteral("删除选中配合"), {}, "deleteMate", [this] { deleteMate(); });
     toolbar->addSeparator();
     auto *fit = action(viewMenu, QStringLiteral("适应全部"), "F", "fitAll", [this] { viewport_->fitAll(); });
@@ -350,8 +354,29 @@ void MainWindow::buildPanels() {
     auto *add = new QPushButton(QStringLiteral("添加配合"));
     auto *remove = new QPushButton(QStringLiteral("移除"));
     buttons->addWidget(add);
+    auto *editMate = new QPushButton(QStringLiteral("编辑"));
+    editMate->setObjectName("editMateButton");
+    buttons->addWidget(editMate);
     buttons->addWidget(remove);
+    connect(editMate, &QPushButton::clicked, this, [this] {
+        if (!mateSelection_.isEmpty())
+            openMateEditor(mateSelection_);
+    });
     mateLayout->addLayout(buttons);
+    mateInfo_ = new QLabel(QStringLiteral("选择配合可在场景查看两对象及关系标记；双击编辑。"));
+    mateInfo_->setWordWrap(true);
+    mateInfo_->setObjectName("mateInfo");
+    mateLayout->addWidget(mateInfo_);
+    mateTree_->installEventFilter(this);
+    connect(mateTree_, &QTreeWidget::itemSelectionChanged, this, [this] {
+        if (refreshing_)
+            return;
+        auto *item = mateTree_->currentItem();
+        selectMate(item && !mateTree_->selectedItems().isEmpty() ? item->data(0, Qt::UserRole).toString()
+                                                                 : QString());
+    });
+    connect(mateTree_, &QTreeWidget::itemDoubleClicked, this,
+            [this](QTreeWidgetItem *item, int) { openMateEditor(item->data(0, Qt::UserRole).toString()); });
     tabs->addTab(matePage, QStringLiteral("配合关系"));
     dock->setWidget(tabs);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
@@ -594,6 +619,8 @@ void MainWindow::refresh() {
     }
     if (!document_.scene().find(selection_))
         selection_.clear();
+    if (!findMate(document_.scene(), mateSelection_))
+        mateSelection_.clear();
     mateTree_->clear();
     int active = 0;
     for (const auto &m : document_.scene().mates) {
@@ -603,6 +630,8 @@ void MainWindow::refresh() {
         item->setData(0, Qt::UserRole, m.id);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(0, m.enabled ? Qt::Checked : Qt::Unchecked);
+        if (m.id == mateSelection_)
+            mateTree_->setCurrentItem(item);
         item->setText(1, m.enabled ? QStringLiteral("满足") : QStringLiteral("停用"));
         const auto r = residual(document_.scene(), m);
         item->setToolTip(
@@ -615,15 +644,26 @@ void MainWindow::refresh() {
                           .arg(active));
     viewport_->setScene(document_.scene());
     viewport_->setSelection(selection_);
+    viewport_->setMateSelection(mateSelection_);
+    if (const auto *m = findMate(document_.scene(), mateSelection_)) {
+        const auto g = mateGuide(document_.scene(), *m);
+        mateInfo_->setText(g.title + "\n" + g.detail + QStringLiteral("\n双击编辑或修改配合。"));
+    } else
+        mateInfo_->setText(QStringLiteral("选择配合可查看轴线、距离与角度；双击编辑。"));
     showProperties();
     refreshing_ = false;
     setWindowTitle(QStringLiteral("AxisForge CAD · ") + document_.scene().title +
                    (document_.history()->isClean() ? QString() : " *"));
 }
 void MainWindow::selectBody(const QString &id) {
+    mateSelection_.clear();
+    viewport_->setMateSelection({});
+    if (mateInfo_)
+        mateInfo_->setText(QStringLiteral("选择配合可查看轴线、距离与角度；双击编辑。"));
     selection_ = document_.scene().find(id) ? id : QString();
     refreshing_ = true;
     tree_->clearSelection();
+    mateTree_->clearSelection();
     for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
         auto *item = tree_->topLevelItem(i);
         if (item->data(0, Qt::UserRole).toString() == selection_) {
@@ -793,83 +833,6 @@ void MainWindow::booleanDialog(BooleanOp op) {
     });
     dialog.exec();
 }
-void MainWindow::addMateDialog() {
-    if (document_.scene().bodies.size() < 2) {
-        statusBar()->showMessage(QStringLiteral("至少创建两个模型才能添加配合。"), 7000);
-        return;
-    }
-    QDialog dialog(this);
-    dialog.setObjectName("mateDialog");
-    dialog.setWindowTitle(QStringLiteral("添加装配配合"));
-    dialog.setMinimumWidth(460);
-    auto *layout = new QVBoxLayout(&dialog);
-    auto *info = new QLabel(QStringLiteral("基准模型驱动从动模型。轴以各模型的局部坐标系定义。\n同轴保留轴向"
-                                           "滑动与绕轴旋转；中心距离测量模型原点。"));
-    info->setWordWrap(true);
-    layout->addWidget(info);
-    auto *form = new QFormLayout;
-    auto *source = new QComboBox;
-    auto *target = new QComboBox;
-    auto *type = new QComboBox;
-    auto *sa = new QComboBox;
-    auto *ta = new QComboBox;
-    for (const auto &b : document_.scene().bodies) {
-        source->addItem(b.name, b.id);
-        target->addItem(b.name, b.id);
-    }
-    if (!selection_.isEmpty())
-        source->setCurrentIndex(source->findData(selection_));
-    target->setCurrentIndex(source->currentIndex() == 0 ? 1 : 0);
-    for (int i = 0; i < 4; ++i)
-        type->addItem(mateName(MateType(i)), i);
-    sa->addItems({"X", "Y", "Z"});
-    ta->addItems({"X", "Y", "Z"});
-    sa->setCurrentIndex(2);
-    ta->setCurrentIndex(2);
-    auto *distance = new QDoubleSpinBox;
-    distance->setRange(0, 1000000);
-    distance->setDecimals(3);
-    distance->setSuffix(" mm");
-    distance->setValue(30);
-    distance->setEnabled(false);
-    form->addRow(QStringLiteral("基准模型"), source);
-    form->addRow(QStringLiteral("从动模型"), target);
-    form->addRow(QStringLiteral("配合类型"), type);
-    form->addRow(QStringLiteral("基准局部轴"), sa);
-    form->addRow(QStringLiteral("从动局部轴"), ta);
-    form->addRow(QStringLiteral("中心距离"), distance);
-    layout->addLayout(form);
-    auto *feedback = new QLabel;
-    feedback->setWordWrap(true);
-    feedback->setStyleSheet("color:#efa5a5;");
-    layout->addWidget(feedback);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [=](int index) {
-        distance->setEnabled(index == 3);
-        sa->setEnabled(index != 3);
-        ta->setEnabled(index != 3);
-    });
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
-        Mate m;
-        m.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        m.source = source->currentData().toString();
-        m.target = target->currentData().toString();
-        m.type = MateType(type->currentData().toInt());
-        m.sourceAxis = sa->currentIndex();
-        m.targetAxis = ta->currentIndex();
-        m.distance = distance->value();
-        QString why;
-        if (document_.edit(
-                QStringLiteral("添加 ") + mateName(m.type), [&](Scene &s) { s.mates << m; }, &why)) {
-            log(QStringLiteral("配合已建立：") + mateName(m.type));
-            dialog.accept();
-        } else
-            feedback->setText(why);
-    });
-    dialog.exec();
-}
 void MainWindow::deleteSelection() {
     const QString id = selection_;
     if (!document_.scene().find(id)) {
@@ -882,6 +845,11 @@ void MainWindow::deleteSelection() {
     log(QStringLiteral("模型与相关配合已删除；Ctrl+Z 可撤销。"));
 }
 bool MainWindow::eventFilter(QObject *object, QEvent *event) {
+    if (object == mateTree_ && event->type() == QEvent::KeyPress &&
+        static_cast<QKeyEvent *>(event)->key() == Qt::Key_Delete) {
+        deleteMate();
+        return true;
+    }
     if (object == tree_ && event->type() == QEvent::KeyPress &&
         static_cast<QKeyEvent *>(event)->key() == Qt::Key_Delete) {
         deleteSelection();
@@ -890,12 +858,11 @@ bool MainWindow::eventFilter(QObject *object, QEvent *event) {
     return QMainWindow::eventFilter(object, event);
 }
 void MainWindow::deleteMate() {
-    auto *item = mateTree_->currentItem();
-    if (!item) {
-        statusBar()->showMessage(QStringLiteral("请先在配合关系页选中一个配合。"), 5000);
+    if (!findMate(document_.scene(), mateSelection_)) {
+        statusBar()->showMessage(QStringLiteral("请先选择一个配合。"), 4000);
         return;
     }
-    auto id = item->data(0, Qt::UserRole).toString();
+    const QString id = mateSelection_;
     document_.edit(QStringLiteral("移除配合"), [&](Scene &s) {
         s.mates.erase(
             std::remove_if(s.mates.begin(), s.mates.end(), [&](const Mate &m) { return m.id == id; }),
@@ -1034,8 +1001,9 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(counts.instances == 1 && counts.visibleInstances == 1 && counts.triangles == 12 &&
                   counts.vertices == 36,
               "scene metrics count box instances triangles and submitted vertices");
-        check(counts.gpuBufferBytes == quint64(36 + 24 + 72 + 24 + 170) * sizeof(Vertex),
-              "GPU buffer payload includes triangle edges and grid");
+        const quint64 modelBytes = quint64(36 + 24 + 72 + 24) * sizeof(Vertex);
+        check(counts.gpuBufferBytes > modelBytes && counts.gpuBufferBytes < modelBytes + 600 * sizeof(Vertex),
+              "GPU buffer payload includes bounded adaptive grid");
         const auto memory = processMemory();
 #if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
         check(memory.available && memory.resident > 0, "process resident memory available");
@@ -1270,6 +1238,8 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(document_.scene().bodies.size() == 4, "OBJ import is one undo transaction");
         check(!exportStep(directory + "/mesh-not-solid.step", document_.scene(), &why),
               "mixed mesh STEP export fails clearly");
+        document_.replace(beforeMesh);
+#include "mate_checks.inc"
         document_.replace(beforeMesh);
         selectBody(solidId);
         viewport_->fitAll();

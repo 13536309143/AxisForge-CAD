@@ -10,7 +10,7 @@
 namespace af {
 enum class Shape { Box, Sphere, Cylinder, Cone, Torus, Solid, Mesh };
 struct SolidData;
-enum class MateType { Coaxial, Parallel, Perpendicular, Distance };
+enum class MateType { Coaxial, Parallel, Perpendicular, Distance, Coincident, Angle, AxialOffset };
 QString shapeKey(Shape shape);
 QString shapeName(Shape shape);
 QString mateKey(MateType type);
@@ -37,7 +37,7 @@ struct Mate {
     QString id, source, target;
     MateType type = MateType::Coaxial;
     int sourceAxis = 2, targetAxis = 2;
-    double distance = 30;
+    double distance = 30, angle = 90, offset = 0;
     bool enabled = true;
 };
 struct Scene {

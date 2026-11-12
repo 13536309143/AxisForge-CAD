@@ -1,6 +1,7 @@
 #include "Constraints.h"
 #include <QHash>
 #include <QStringList>
+#include <QtMath>
 #include <cmath>
 namespace af {
 Residual residual(const Scene &s, const Mate &m) {
@@ -19,6 +20,14 @@ Residual residual(const Scene &s, const Mate &m) {
         r.linear = (delta - QVector3D::dotProduct(delta, x) * x).length();
     if (m.type == MateType::Distance)
         r.linear = std::abs(delta.length() - m.distance);
+    if (m.type == MateType::Coincident)
+        r.linear = delta.length();
+    if (m.type == MateType::AxialOffset)
+        r.linear = std::abs(QVector3D::dotProduct(delta, x) - m.offset);
+    if (m.type == MateType::Angle)
+        r.angular = std::abs(
+            std::atan2(double(QVector3D::crossProduct(x, y).length()), double(QVector3D::dotProduct(x, y))) -
+            qDegreesToRadians(m.angle));
     return r;
 }
 bool solve(Scene &scene, QString *error) {
@@ -75,7 +84,23 @@ bool solve(Scene &scene, QString *error) {
                     b->rotation = (QQuaternion::rotationTo(targetAxis, desired.normalized()) * b->rotation)
                                       .normalized();
                 }
+                if (m.type == MateType::Angle) {
+                    auto radial = targetAxis - QVector3D::dotProduct(targetAxis, sourceAxis) * sourceAxis;
+                    if (radial.lengthSquared() < 1e-10f) {
+                        const auto helper =
+                            std::abs(sourceAxis.x()) < .8f ? QVector3D(1, 0, 0) : QVector3D(0, 1, 0);
+                        radial = QVector3D::crossProduct(sourceAxis, helper);
+                    }
+                    const double theta = qDegreesToRadians(m.angle);
+                    const auto desired =
+                        sourceAxis * float(std::cos(theta)) + radial.normalized() * float(std::sin(theta));
+                    b->rotation = (QQuaternion::rotationTo(targetAxis, desired) * b->rotation).normalized();
+                }
                 auto delta = b->position - a->position;
+                if (m.type == MateType::Coincident)
+                    b->position = a->position;
+                if (m.type == MateType::AxialOffset)
+                    b->position += sourceAxis * float(m.offset - QVector3D::dotProduct(delta, sourceAxis));
                 if (m.type == MateType::Coaxial)
                     b->position = a->position + QVector3D::dotProduct(delta, sourceAxis) * sourceAxis;
                 if (m.type == MateType::Distance) {

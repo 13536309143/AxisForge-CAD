@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Geometry.h"
+#include "core/Presentation.h"
 #include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QOpenGLBuffer>
@@ -10,6 +11,7 @@
 #include <QWheelEvent>
 #include <memory>
 #include <vector>
+class QPainter;
 namespace af {
 class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
@@ -18,6 +20,15 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     ~Viewport() override;
     void setScene(const Scene &scene);
     void setSelection(const QString &id);
+    void setMateSelection(const QString &id, const QString &note = {});
+    QString selectedMate() const {
+        return mateId_;
+    }
+    MateGuide currentMateGuide() const;
+    void setMatePicking(bool enabled);
+    GridPlan gridPlan() const {
+        return gridPlan_;
+    }
     void fitAll();
     void setView(int preset);
     enum class DisplayMode { Normal, Triangles, Bounds, Wireframe };
@@ -55,6 +66,7 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     }
   signals:
     void selected(const QString &id);
+    void matePickCancelled();
     void cameraChanged();
     void moveStarted(const QString &id);
     void movePreview(const QString &id, const QVector3D &position);
@@ -83,13 +95,19 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     };
     void cleanup();
     void rebuild();
+    void rebuildGrid();
+    void paintMateGuide(QPainter &p);
     std::unique_ptr<GpuMesh> upload(const QVector<Vertex> &vertices, int count, int edges, const QString &id);
     QMatrix4x4 view() const;
     QMatrix4x4 projection() const;
     QVector3D eye() const;
     bool dragPoint(const QPoint &point, QVector3D &world) const;
     Scene scene_;
-    QString selected_, renderer_, error_;
+    QString selected_, renderer_, error_, mateId_, previewNote_;
+    bool matePicking_ = false;
+    Bounds worldBounds_;
+    GridPlan gridPlan_;
+    int gridMinorCount_ = 0;
     bool dirty_ = true, orthographic_ = false;
     DisplayMode displayMode_ = DisplayMode::Normal;
     float yaw_ = 45, pitch_ = 30, distance_ = 210;

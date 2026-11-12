@@ -78,12 +78,30 @@ Viewport::Metrics Viewport::metrics() const {
 }
 void Viewport::setScene(const Scene &s) {
     scene_ = s;
+    worldBounds_ = visibleWorldBounds(s);
     dirty_ = true;
     update();
 }
 void Viewport::setSelection(const QString &id) {
     selected_ = id;
     update();
+}
+void Viewport::setMatePicking(bool enabled) {
+    if (enabled && moving_) {
+        moving_ = false;
+        emit moveFinished(false);
+    }
+    matePicking_ = enabled;
+    dragId_.clear();
+}
+void Viewport::setMateSelection(const QString &id, const QString &note) {
+    mateId_ = findMate(scene_, id) ? id : QString();
+    previewNote_ = note;
+    update();
+}
+MateGuide Viewport::currentMateGuide() const {
+    const auto *mate = findMate(scene_, mateId_);
+    return mate ? mateGuide(scene_, *mate) : MateGuide{};
 }
 void Viewport::cleanup() {
     if (!context())
@@ -190,18 +208,39 @@ void Viewport::rebuild() {
             meshes_.push_back(std::move(gpu));
         }
     }
-    QVector<Vertex> lines;
-    for (int i = -20; i <= 20; ++i) {
-        float p = i * 10.0f;
-        lines << Vertex{{-200, p, 0}, {0, 0, 1}} << Vertex{{200, p, 0}, {0, 0, 1}}
-              << Vertex{{p, -200, 0}, {0, 0, 1}} << Vertex{{p, 200, 0}, {0, 0, 1}};
-    }
-    int count = lines.size();
-    lines << Vertex{{0, 0, 0.05f}, {0, 0, 1}} << Vertex{{70, 0, 0.05f}, {0, 0, 1}}
-          << Vertex{{0, 0, 0.05f}, {0, 0, 1}} << Vertex{{0, 70, 0.05f}, {0, 0, 1}}
-          << Vertex{{0, 0, 0}, {0, 0, 1}} << Vertex{{0, 0, 70}, {0, 0, 1}};
-    grid_ = upload(lines, count, 6, "grid");
     dirty_ = false;
+}
+void Viewport::rebuildGrid() {
+    const auto plan = adaptiveGrid(worldBounds_, target_, distance_);
+    if (grid_ && plan == gridPlan_)
+        return;
+    gridPlan_ = plan;
+    QVector<Vertex> minor, major;
+    auto add = [&](QVector3D a, QVector3D b, bool isMajor) {
+        auto &v = isMajor ? major : minor;
+        v << Vertex{a, {0, 0, 1}} << Vertex{b, {0, 0, 1}};
+    };
+    const int nx = int(std::llround((plan.maxX - plan.minX) / plan.step));
+    const int ny = int(std::llround((plan.maxY - plan.minY) / plan.step));
+    for (int i = 0; i <= nx; ++i) {
+        const double x = plan.minX + i * plan.step;
+        add({float(x), float(plan.minY), float(plan.z)}, {float(x), float(plan.maxY), float(plan.z)},
+            std::llround(x / plan.step) % 5 == 0);
+    }
+    for (int i = 0; i <= ny; ++i) {
+        const double y = plan.minY + i * plan.step;
+        add({float(plan.minX), float(y), float(plan.z)}, {float(plan.maxX), float(y), float(plan.z)},
+            std::llround(y / plan.step) % 5 == 0);
+    }
+    gridMinorCount_ = minor.size();
+    QVector<Vertex> lines = minor;
+    lines += major;
+    int count = lines.size();
+    float length = float(plan.axisLength);
+    lines << Vertex{{0, 0, .01f}, {0, 0, 1}} << Vertex{{length, 0, .01f}, {0, 0, 1}}
+          << Vertex{{0, 0, .01f}, {0, 0, 1}} << Vertex{{0, length, .01f}, {0, 0, 1}}
+          << Vertex{{0, 0, 0}, {0, 0, 1}} << Vertex{{0, 0, length}, {0, 0, 1}};
+    grid_ = upload(lines, count, 6, "grid");
 }
 QVector3D Viewport::eye() const {
     return target_ + distance_ * QVector3D(std::cos(pitch_ * rad) * std::cos(yaw_ * rad),
@@ -216,11 +255,15 @@ QMatrix4x4 Viewport::view() const {
 QMatrix4x4 Viewport::projection() const {
     QMatrix4x4 m;
     float aspect = float(width()) / qMax(1, height());
+    const float nearPlane = qMax(.01f, distance_ * .001f);
+    const float sceneReach =
+        worldBounds_.valid ? (worldBounds_.center() - target_).length() + worldBounds_.radius() * 3 : 0;
+    const float farPlane = qMax(1000.0f, distance_ * 8 + sceneReach);
     if (orthographic_) {
         float h = distance_ * 0.4f;
-        m.ortho(-h * aspect, h * aspect, -h, h, 0.1f, 50000.0f);
+        m.ortho(-h * aspect, h * aspect, -h, h, nearPlane, farPlane);
     } else
-        m.perspective(42.0f, aspect, 0.1f, 50000.0f);
+        m.perspective(42.0f, aspect, nearPlane, farPlane);
     return m;
 }
 void Viewport::fitAll() {
@@ -231,7 +274,7 @@ void Viewport::fitAll() {
         float halfFov = 21.0f * rad;
         if (aspect < 1)
             halfFov = std::atan(std::tan(halfFov) * aspect);
-        distance_ = qBound(5.0f, b.radius() / std::sin(halfFov) * 1.18f, 30000.0f);
+        distance_ = qBound(5.0f, b.radius() / std::sin(halfFov) * 1.18f, 6000000.0f);
     } else {
         target_ = {0, 0, 15};
         distance_ = 180;
@@ -324,6 +367,8 @@ void Viewport::paintGL() {
     if (program_ && error_.isEmpty()) {
         if (dirty_)
             rebuild();
+        rebuildGrid();
+        const auto guide = currentMateGuide();
         program_->bind();
         QMatrix4x4 identity;
         const auto vp = projection() * view();
@@ -336,7 +381,9 @@ void Viewport::paintGL() {
         if (grid_) {
             grid_->vao.bind();
             program_->setUniformValue("objectColor", QVector3D(0.14f, 0.18f, 0.23f));
-            glDrawArrays(GL_LINES, 0, grid_->count);
+            glDrawArrays(GL_LINES, 0, gridMinorCount_);
+            program_->setUniformValue("objectColor", QVector3D(.23f, .29f, .36f));
+            glDrawArrays(GL_LINES, gridMinorCount_, grid_->count - gridMinorCount_);
             const QVector3D colors[] = {{0.78f, 0.33f, 0.35f}, {0.3f, 0.69f, 0.5f}, {0.35f, 0.57f, 0.9f}};
             for (int i = 0; i < 3; ++i) {
                 program_->setUniformValue("objectColor", colors[i]);
@@ -349,25 +396,35 @@ void Viewport::paintGL() {
             if (!b || !b->visible)
                 continue;
             const auto model = b->matrix();
+            const bool related = guide.valid && (b->id == guide.source || b->id == guide.target);
+            const bool highlighted = b->id == selected_ || related;
+            const auto highlight = related ? (!guide.enabled          ? QVector3D(.65f, .68f, .72f)
+                                              : b->id == guide.source ? QVector3D(.33f, .85f, .94f)
+                                                                      : QVector3D(1.f, .72f, .4f))
+                                           : QVector3D(1.f, .73f, .32f);
             program_->setUniformValue("mvp", vp * model);
             program_->setUniformValue("model", model);
             program_->setUniformValue("normalMatrix", model.normalMatrix());
-            program_->setUniformValue("selected", int(b->id == selected_));
+            program_->setUniformValue("selected", int(highlighted));
             const bool linesOnly =
                 displayMode_ == DisplayMode::Wireframe || displayMode_ == DisplayMode::Bounds;
             program_->setUniformValue("unlit", int(linesOnly));
             program_->setUniformValue(
                 "objectColor",
-                QVector3D(float(b->color.redF()), float(b->color.greenF()), float(b->color.blueF())));
+                related
+                    ? highlight * .65f + QVector3D(float(b->color.redF()), float(b->color.greenF()),
+                                                   float(b->color.blueF())) *
+                                             .35f
+                    : QVector3D(float(b->color.redF()), float(b->color.greenF()), float(b->color.blueF())));
             gpu->vao.bind();
             if (displayMode_ == DisplayMode::Bounds) {
-                if (b->id == selected_)
-                    program_->setUniformValue("objectColor", QVector3D(1.0f, 0.73f, 0.32f));
+                if (highlighted)
+                    program_->setUniformValue("objectColor", highlight);
                 glDrawArrays(GL_LINES, gpu->count + gpu->edgeCount + gpu->triangleEdgeCount,
                              gpu->boundsCount);
             } else if (displayMode_ == DisplayMode::Wireframe) {
-                if (b->id == selected_)
-                    program_->setUniformValue("objectColor", QVector3D(1.0f, 0.73f, 0.32f));
+                if (highlighted)
+                    program_->setUniformValue("objectColor", highlight);
                 glDrawArrays(GL_LINES, gpu->count, gpu->edgeCount);
             } else {
                 glEnable(GL_POLYGON_OFFSET_FILL);
@@ -376,13 +433,12 @@ void Viewport::paintGL() {
                 glDisable(GL_POLYGON_OFFSET_FILL);
                 if (displayMode_ == DisplayMode::Triangles) {
                     program_->setUniformValue("unlit", 1);
-                    program_->setUniformValue("objectColor", b->id == selected_
-                                                                 ? QVector3D(1.0f, 0.73f, 0.32f)
-                                                                 : QVector3D(0.08f, 0.14f, 0.22f));
+                    program_->setUniformValue("objectColor",
+                                              highlighted ? highlight : QVector3D(0.08f, 0.14f, 0.22f));
                     glDrawArrays(GL_LINES, gpu->count + gpu->edgeCount, gpu->triangleEdgeCount);
-                } else if (b->id == selected_) {
+                } else if (highlighted) {
                     program_->setUniformValue("unlit", 1);
-                    program_->setUniformValue("objectColor", QVector3D(1.0f, 0.73f, 0.32f));
+                    program_->setUniformValue("objectColor", highlight);
                     glDrawArrays(GL_LINES, gpu->count, gpu->edgeCount);
                 }
             }
@@ -399,7 +455,10 @@ void Viewport::paintGL() {
                              : QStringLiteral("PERSPECTIVE  /  透视视图"));
     const QStringList modeNames = {QStringLiteral("常规模式"), QStringLiteral("三角面模式"),
                                    QStringLiteral("包围盒模式"), QStringLiteral("拓扑线框模式")};
-    p.drawText(22, 50, modeNames[int(displayMode_)]);
+    p.drawText(22, 50,
+               modeNames[int(displayMode_)] +
+                   QStringLiteral(" · 网格间距 %1 mm").arg(gridPlan_.step, 0, 'g', 5));
+    paintMateGuide(p);
     p.drawText(22, height() - 22,
                QStringLiteral("左键选择/拖动模型 · Delete 删除 · Esc 取消拖动 · 右键旋转 · 中键平移"));
     if (!error_.isEmpty()) {
@@ -425,6 +484,10 @@ void Viewport::mousePressEvent(QMouseEvent *e) {
     if (e->button() == Qt::LeftButton) {
         dragId_ = pickAt(e->pos());
         emit selected(dragId_);
+        if (matePicking_) {
+            dragId_.clear();
+            return;
+        }
         const auto *body = scene_.find(dragId_);
         if (body && !body->fixed) {
             dragOrigin_ = body->position;
@@ -489,6 +552,11 @@ bool Viewport::dragPoint(const QPoint &point, QVector3D &world) const {
     return true;
 }
 void Viewport::keyPressEvent(QKeyEvent *e) {
+    if (e->key() == Qt::Key_Escape && matePicking_) {
+        emit matePickCancelled();
+        e->accept();
+        return;
+    }
     if (e->key() == Qt::Key_Escape && moving_) {
         moving_ = false;
         dragId_.clear();
@@ -496,7 +564,7 @@ void Viewport::keyPressEvent(QKeyEvent *e) {
         e->accept();
         return;
     }
-    if (e->key() == Qt::Key_Delete && !moving_) {
+    if (e->key() == Qt::Key_Delete && !moving_ && !matePicking_) {
         emit deleteRequested();
         e->accept();
         return;
@@ -504,7 +572,7 @@ void Viewport::keyPressEvent(QKeyEvent *e) {
     QOpenGLWidget::keyPressEvent(e);
 }
 void Viewport::wheelEvent(QWheelEvent *e) {
-    distance_ = qBound(2.0f, distance_ * float(std::pow(0.88, e->angleDelta().y() / 120.0)), 30000.0f);
+    distance_ = qBound(2.0f, distance_ * float(std::pow(0.88, e->angleDelta().y() / 120.0)), 6000000.0f);
     update();
     emit cameraChanged();
     e->accept();
