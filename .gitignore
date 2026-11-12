@@ -1,0 +1,10 @@
+build*/
+run/
+test-artifacts/
+*.user
+*.exe
+*.dll
+*.pdb
+*.obj
+*.zip
+.vs/

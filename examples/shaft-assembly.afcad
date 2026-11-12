@@ -1,0 +1,165 @@
+{
+    "bodies": [
+        {
+            "color": "#516780",
+            "fixed": true,
+            "id": "e90d3baf-534b-4751-8154-d9dbbd7569ac",
+            "name": "01 · 基座 / 固定",
+            "parameters": {
+                "depth": 68,
+                "height": 10,
+                "radius": 15,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 100
+            },
+            "position": [
+                0,
+                0,
+                5
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "box",
+            "visible": true
+        },
+        {
+            "color": "#65c8da",
+            "fixed": false,
+            "id": "ec5d6989-ea45-4b51-b491-3bf65b939a68",
+            "name": "02 · 主轴 / 基准 Z",
+            "parameters": {
+                "depth": 30,
+                "height": 62,
+                "radius": 9,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                0,
+                0,
+                41
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "cylinder",
+            "visible": true
+        },
+        {
+            "color": "#e58fa7",
+            "fixed": false,
+            "id": "faf946a6-5310-4eca-883b-6da534375648",
+            "name": "03 · 定位环 / 同轴",
+            "parameters": {
+                "depth": 30,
+                "height": 30,
+                "radius": 15,
+                "segments": 48,
+                "tubeRadius": 4,
+                "width": 30
+            },
+            "position": [
+                0,
+                0,
+                38
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "torus",
+            "visible": true
+        },
+        {
+            "color": "#efba74",
+            "fixed": false,
+            "id": "0013f0b3-57d7-4814-b2fc-b905fee4c605",
+            "name": "04 · 球头",
+            "parameters": {
+                "depth": 30,
+                "height": 30,
+                "radius": 14,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                0,
+                0,
+                83
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "sphere",
+            "visible": true
+        },
+        {
+            "color": "#bd9be8",
+            "fixed": false,
+            "id": "d7876a89-ef03-447e-9c6f-91dd9b9a431c",
+            "name": "05 · 定位锥",
+            "parameters": {
+                "depth": 30,
+                "height": 28,
+                "radius": 12,
+                "segments": 48,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                34,
+                12,
+                24
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "cone",
+            "visible": true
+        }
+    ],
+    "format": "axisforge.project",
+    "mates": [
+        {
+            "distance": 30,
+            "enabled": true,
+            "id": "demo-coaxial",
+            "source": "ec5d6989-ea45-4b51-b491-3bf65b939a68",
+            "sourceAxis": 2,
+            "target": "faf946a6-5310-4eca-883b-6da534375648",
+            "targetAxis": 2,
+            "type": "coaxial"
+        },
+        {
+            "distance": 42,
+            "enabled": true,
+            "id": "demo-distance",
+            "source": "ec5d6989-ea45-4b51-b491-3bf65b939a68",
+            "sourceAxis": 2,
+            "target": "0013f0b3-57d7-4814-b2fc-b905fee4c605",
+            "targetAxis": 2,
+            "type": "distance"
+        }
+    ],
+    "title": "精密转轴 · 装配示例",
+    "units": "mm",
+    "version": 1
+}
