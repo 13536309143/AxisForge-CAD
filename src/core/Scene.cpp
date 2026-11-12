@@ -11,11 +11,12 @@ namespace {
 constexpr double pi = 3.14159265358979323846;
 }
 QString shapeKey(Shape s) {
-    return QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid"}.value(int(s));
+    return QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid", "mesh"}.value(int(s));
 }
 QString shapeName(Shape s) {
-    return QStringList{QStringLiteral("长方体"), QStringLiteral("球体"), QStringLiteral("圆柱"),
-                       QStringLiteral("圆锥"),   QStringLiteral("圆环"), QStringLiteral("OCCT 实体")}
+    return QStringList{QStringLiteral("长方体"),  QStringLiteral("球体"), QStringLiteral("圆柱"),
+                       QStringLiteral("圆锥"),    QStringLiteral("圆环"), QStringLiteral("OCCT 实体"),
+                       QStringLiteral("网格模型")}
         .value(int(s));
 }
 QString mateKey(MateType t) {
@@ -63,12 +64,13 @@ bool Scene::validate(QString *error) const {
     if (title.size() > 200 || bodies.size() > 300 || mates.size() > 1000)
         return fail(QStringLiteral("项目超过大小限制。"));
     QSet<QString> ids, mateIds;
+    qint64 meshVertices = 0;
     auto finite = [](double v) { return std::isfinite(v); };
     for (const auto &b : bodies) {
         if (b.id.isEmpty() || b.id.size() > 80 || ids.contains(b.id))
             return fail(QStringLiteral("模型 ID 缺失或重复。"));
         ids.insert(b.id);
-        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 5 ||
+        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 6 ||
             !b.color.isValid())
             return fail(QStringLiteral("模型名称、类型或颜色无效。"));
         for (double value :
@@ -89,7 +91,12 @@ bool Scene::validate(QString *error) const {
         if (std::abs(q.length() - 1.0f) > 0.002f)
             return fail(QStringLiteral("旋转四元数必须归一化。"));
         try {
-            solidData(b);
+            const auto geometry = solidData(b);
+            if (b.shape == Shape::Mesh) {
+                meshVertices += geometry->mesh.vertices.size();
+                if (meshVertices > 3000000)
+                    return fail(QStringLiteral("场景网格总量超过 300 万个顶点。"));
+            }
         } catch (const Standard_Failure &e) {
             return fail(QString::fromUtf8(e.GetMessageString()));
         } catch (const std::exception &e) {

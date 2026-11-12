@@ -1,6 +1,7 @@
 #include "Document.h"
 #include "core/Constraints.h"
 #include "core/Kernel.h"
+#include "core/MeshIO.h"
 #include "core/ProjectIO.h"
 #include <QUndoCommand>
 #include <QUuid>
@@ -132,6 +133,21 @@ bool Document::importStepFile(const QString &path, QString *error) {
         return false;
     }
     return edit(QStringLiteral("导入 STEP 实体"), [&](Scene &s) { s.bodies += imported; }, error);
+}
+bool Document::importMesh(const QString &path, QString *error, QStringList *warnings) {
+    QVector<Body> imported;
+    QString why;
+    QStringList notes;
+    if (!importMeshFile(path, imported, &why, &notes)) {
+        if (error)
+            *error = why;
+        emit rejected(why);
+        return false;
+    }
+    bool ok = edit(QStringLiteral("导入 GLB/OBJ 网格"), [&](Scene &s) { s.bodies += imported; }, error);
+    if (ok && warnings)
+        *warnings = notes;
+    return ok;
 }
 void Document::previewMove(const QString &id, const QVector3D &position) {
     if (!moveBefore_ || id != movingId_)

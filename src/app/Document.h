@@ -1,6 +1,7 @@
 #pragma once
 #include "core/Scene.h"
 #include <QObject>
+#include <QStringList>
 #include <QUndoStack>
 #include <functional>
 #include <memory>
@@ -24,6 +25,7 @@ class Document : public QObject {
     QString booleanOperation(const QString &a, const QString &b, BooleanOp op, bool hideOperands = true,
                              QString *error = nullptr);
     bool importStepFile(const QString &path, QString *error = nullptr);
+    bool importMesh(const QString &path, QString *error = nullptr, QStringList *warnings = nullptr);
     void beginMove(const QString &id);
     void previewMove(const QString &id, const QVector3D &position);
     void finishMove(bool commit);

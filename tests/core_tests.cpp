@@ -5,6 +5,7 @@
 #include "core/Scene.h"
 #include <BRepCheck_Analyzer.hxx>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -22,6 +23,7 @@
             throw std::runtime_error(#condition);                                                            \
     } while (false)
 using namespace af;
+#include "MeshFixtures.h"
 #include "StepFixtures.h"
 namespace {
 Mate mate(const Body &a, const Body &b, MateType type) {
@@ -341,6 +343,7 @@ int main(int argc, char **argv) {
             }
     });
 #include "kernel_cases.inc"
+#include "mesh_cases.inc"
     out << "\n" << passed << " passed, " << failed << " failed\n";
     return failed ? 1 : 0;
 }

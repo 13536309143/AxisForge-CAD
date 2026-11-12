@@ -2,6 +2,7 @@
 #include "Constraints.h"
 #include "Geometry.h"
 #include "Kernel.h"
+#include "MeshIO.h"
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,6 +11,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QTextStream>
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -76,6 +78,8 @@ QByteArray serialize(const Scene &s) {
                            {"fixed", b.fixed}};
         if (b.shape == Shape::Solid)
             object["brep"] = QString::fromLatin1(encodeBrep(b));
+        if (b.shape == Shape::Mesh)
+            object["mesh"] = QString::fromLatin1(encodeMesh(b));
         bodies.append(object);
     }
     for (const auto &m : s.mates)
@@ -87,12 +91,16 @@ QByteArray serialize(const Scene &s) {
                                  {"targetAxis", m.targetAxis},
                                  {"distance", m.distance},
                                  {"enabled", m.enabled}});
-    return QJsonDocument(QJsonObject{{"format", "axisforge.project"},
-                                     {"version", 2},
-                                     {"units", "mm"},
-                                     {"title", s.title},
-                                     {"bodies", bodies},
-                                     {"mates", mates}})
+    return QJsonDocument(
+               QJsonObject{{"format", "axisforge.project"},
+                           {"version", std::any_of(s.bodies.begin(), s.bodies.end(),
+                                                   [](const Body &b) { return b.shape == Shape::Mesh; })
+                                           ? 3
+                                           : 2},
+                           {"units", "mm"},
+                           {"title", s.title},
+                           {"bodies", bodies},
+                           {"mates", mates}})
         .toJson(QJsonDocument::Indented);
 }
 bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
@@ -110,13 +118,16 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
     try {
         const auto root = doc.object();
         if (string(root, "format") != "axisforge.project" ||
-            (integer(root, "version") != 1 && integer(root, "version") != 2) || string(root, "units") != "mm")
+            (integer(root, "version") != 1 && integer(root, "version") != 2 &&
+             integer(root, "version") != 3) ||
+            string(root, "units") != "mm")
             return fail(QStringLiteral("不支持的项目格式、版本或单位。"));
         if (!root["bodies"].isArray() || !root["mates"].isArray())
             return fail(QStringLiteral("项目缺少模型或约束列表。"));
         if (root["bodies"].toArray().size() > 300 || root["mates"].toArray().size() > 1000)
             return fail(QStringLiteral("项目对象数量超过限制。"));
         Scene result;
+        int meshVertices = 0;
         result.title = string(root, "title");
         for (auto item : root["bodies"].toArray()) {
             if (!item.isObject())
@@ -125,7 +136,7 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             Body b;
             b.id = string(o, "id");
             b.name = string(o, "name");
-            int shape = QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid"}.indexOf(
+            int shape = QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid", "mesh"}.indexOf(
                 string(o, "shape"));
             if (shape < 0)
                 throw std::runtime_error("Unknown shape");
@@ -151,6 +162,14 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
                 QString why;
                 if (!decodeBrep(string(o, "brep").toLatin1(), b, &why))
                     throw std::runtime_error(why.toStdString());
+            }
+            if (b.shape == Shape::Mesh) {
+                if (integer(root, "version") < 3)
+                    throw std::runtime_error("网格需要项目格式 version 3。");
+                QString why;
+                if (!decodeMesh(string(o, "mesh").toLatin1(), b, &why, 3000000 - meshVertices))
+                    throw std::runtime_error(why.toStdString());
+                meshVertices += b.solid->mesh.vertices.size();
             }
             result.bodies << b;
         }

@@ -2,6 +2,7 @@
 #include "app/ProcessMemory.h"
 #include "core/Constraints.h"
 #include "core/Kernel.h"
+#include "core/MeshIO.h"
 #include "core/ProjectIO.h"
 #include <QAction>
 #include <QActionGroup>
@@ -16,6 +17,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -166,6 +168,25 @@ void MainWindow::buildActions() {
         else
             log(QStringLiteral("已导出 STEP 实体：") + path);
     });
+    action(file, QStringLiteral("导入 GLB / OBJ 网格…"), {}, "importMesh", [this] {
+        auto p = QFileDialog::getOpenFileName(this, QStringLiteral("导入网格（OBJ 按毫米 / Z 向上）"), {},
+                                              "Mesh (*.glb *.obj *.GLB *.OBJ)");
+        if (!p.isEmpty())
+            openFile(p);
+    });
+    action(file, QStringLiteral("导出 GLB…"), {}, "exportGlb", [this] {
+        auto p = QFileDialog::getSaveFileName(this, QStringLiteral("导出可见模型为 GLB"), "assembly.glb",
+                                              "GLB (*.glb)");
+        if (p.isEmpty())
+            return;
+        if (QFileInfo(p).suffix().isEmpty())
+            p += ".glb";
+        QString why;
+        if (!exportGlb(p, document_.scene(), &why))
+            QMessageBox::warning(this, QStringLiteral("GLB 导出失败"), why);
+        else
+            log(QStringLiteral("已导出 GLB（米 / Y 向上）：") + p);
+    });
     for (int i = 0; i < 2; ++i)
         action(file, i ? QStringLiteral("导出 STL…") : QStringLiteral("导出 OBJ…"), {},
                i ? "exportStl" : "exportObj", [this, i] {
@@ -175,7 +196,10 @@ void MainWindow::buildActions() {
                    if (p.isEmpty())
                        return;
                    QString error;
-                   if (!exportMesh(p, document_.scene(), i == 1, &error))
+                   if (QFileInfo(p).suffix().isEmpty())
+                       p += i ? ".stl" : ".obj";
+                   if (!(i ? exportMesh(p, document_.scene(), true, &error)
+                           : exportObj(p, document_.scene(), &error)))
                        QMessageBox::warning(this, QStringLiteral("导出失败"), error);
                    else
                        log(QStringLiteral("已导出：") + p);
@@ -638,17 +662,20 @@ void MainWindow::showProperties() {
     numbers_["depth"]->setEnabled(b->shape == Shape::Box);
     numbers_["height"]->setEnabled(b->shape == Shape::Box || b->shape == Shape::Cylinder ||
                                    b->shape == Shape::Cone);
-    numbers_["radius"]->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid);
+    numbers_["radius"]->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid &&
+                                   b->shape != Shape::Mesh);
     numbers_["tubeRadius"]->setEnabled(b->shape == Shape::Torus);
-    segments_->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid);
+    segments_->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid && b->shape != Shape::Mesh);
     for (const auto &key : QStringList{"width", "depth", "height", "radius", "tubeRadius"}) {
         auto *spin = numbers_[key];
-        spin->setSpecialValueText(b->shape == Shape::Solid ? QStringLiteral("由实体定义") : QString());
-        if (b->shape == Shape::Solid)
+        spin->setSpecialValueText(
+            (b->shape == Shape::Solid || b->shape == Shape::Mesh) ? QStringLiteral("由实体定义") : QString());
+        if ((b->shape == Shape::Solid || b->shape == Shape::Mesh))
             spin->setValue(spin->minimum());
     }
-    segments_->setSpecialValueText(b->shape == Shape::Solid ? QStringLiteral("由实体定义") : QString());
-    if (b->shape == Shape::Solid)
+    segments_->setSpecialValueText(
+        (b->shape == Shape::Solid || b->shape == Shape::Mesh) ? QStringLiteral("由实体定义") : QString());
+    if ((b->shape == Shape::Solid || b->shape == Shape::Mesh))
         segments_->setValue(segments_->minimum());
     const auto e = b->rotation.toEulerAngles();
     for (int i = 0; i < 3; ++i) {
@@ -657,6 +684,15 @@ void MainWindow::showProperties() {
     }
     const int triangles = tessellate(*b).vertices.size() / 3;
     const auto topology = solidData(*b);
+    if (b->shape == Shape::Mesh) {
+        stats_->setText(
+            QStringLiteral("网格模型 · %1 个三角形\n近似表面积  %2 "
+                           "mm²\n体积：不可用（未验证为封闭实体）\n\n尺寸由网格定义；可编辑位置、旋转、颜色和"
+                           "固定状态。\n线框显示三角形边。可导出 GLB/OBJ/STL，不支持实体布尔或 STEP。")
+                .arg(triangles)
+                .arg(surfaceArea(*b), 0, 'f', 2));
+        return;
+    }
     stats_->setText(
         QStringLiteral(
             "OCCT %4 · 实体 %5 / 面 %6 / 边 %7\n几何信息\n体积  %1 mm³\n表面积  %2 mm²\n显示网格  %3 "
@@ -678,7 +714,7 @@ void MainWindow::applyProperties() {
     updated.color = pendingColor_;
     updated.visible = visible_->isChecked();
     updated.fixed = fixed_->isChecked();
-    if (updated.shape != Shape::Solid) {
+    if (updated.shape != Shape::Solid && updated.shape != Shape::Mesh) {
         auto &p = updated.params;
         p.width = numbers_["width"]->value();
         p.depth = numbers_["depth"]->value();
@@ -699,8 +735,9 @@ void MainWindow::applyProperties() {
         showProperties();
 }
 void MainWindow::booleanDialog(BooleanOp op) {
-    if (document_.scene().bodies.size() < 2) {
-        statusBar()->showMessage(QStringLiteral("布尔运算需要至少两个模型。"), 6000);
+    if (std::count_if(document_.scene().bodies.begin(), document_.scene().bodies.end(),
+                      [](const Body &b) { return b.shape != Shape::Mesh; }) < 2) {
+        statusBar()->showMessage(QStringLiteral("布尔运算需要至少两个 OCCT 实体；网格不参与。"), 6000);
         return;
     }
     QDialog dialog(this);
@@ -710,6 +747,8 @@ void MainWindow::booleanDialog(BooleanOp op) {
     auto *form = new QFormLayout;
     auto *a = new QComboBox, *b = new QComboBox, *type = new QComboBox;
     for (const auto &body : document_.scene().bodies) {
+        if (body.shape == Shape::Mesh)
+            continue;
         a->addItem(body.name, body.id);
         b->addItem(body.name, body.id);
     }
@@ -864,6 +903,26 @@ void MainWindow::deleteMate() {
     });
 }
 bool MainWindow::openFile(const QString &path) {
+    const auto suffix = QFileInfo(path).suffix().toLower();
+    if (suffix == "glb" || suffix == "obj") {
+        QString why;
+        QStringList notes;
+        if (!document_.importMesh(path, &why, &notes)) {
+            log(QStringLiteral("网格导入失败：") + why);
+            if (!selfTesting_)
+                QMessageBox::warning(this, QStringLiteral("网格导入失败"), why);
+            return false;
+        }
+        viewport_->fitAll();
+        if (!document_.scene().bodies.isEmpty())
+            selectBody(document_.scene().bodies.last().id);
+        log(QStringLiteral("已导入网格：") + path);
+        for (const auto &note : notes)
+            log(QStringLiteral("导入提示：") + note);
+        if (!notes.isEmpty() && !selfTesting_)
+            QMessageBox::information(this, QStringLiteral("网格导入说明"), notes.join('\n'));
+        return true;
+    }
     Scene candidate;
     QString why;
     if (!loadProject(path, candidate, &why)) {
@@ -1168,6 +1227,50 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(document_.scene().bodies.size() == 4, "STEP import adds visible solid");
         document_.history()->undo();
         check(document_.scene().bodies.size() == 3, "undo STEP import");
+        const Scene beforeMesh = document_.scene();
+        check(findChild<QAction *>("importMesh") && findChild<QAction *>("exportGlb"),
+              "GLB and OBJ file actions exist");
+        check(exportGlb(directory + "/exchange.glb", beforeMesh, &why), "desktop GLB export");
+        check(openFile(directory + "/exchange.glb"), "desktop GLB import through normal file entry");
+        check(document_.scene().bodies.size() == 4, "GLB adds visible mesh without replacing scene");
+        const QString meshId = document_.scene().bodies.last().id;
+        selectBody(meshId);
+        check(document_.scene().find(meshId)->shape == Shape::Mesh, "GLB remains a mesh");
+        check(!numbers_["radius"]->isEnabled() && !segments_->isEnabled(), "mesh dimensions read-only");
+        check(stats_->text().contains(QStringLiteral("体积：不可用")), "mesh does not claim solid volume");
+        const auto originalPosition = document_.scene().find(meshId)->position;
+        document_.beginMove(meshId);
+        document_.previewMove(meshId, originalPosition + QVector3D(35, 0, 0));
+        document_.finishMove(true);
+        check(vectorsClose(document_.scene().find(meshId)->position, originalPosition + QVector3D(35, 0, 0)),
+              "imported mesh can be moved");
+        document_.history()->undo();
+        check(vectorsClose(document_.scene().find(meshId)->position, originalPosition), "undo mesh move");
+        deleteSelection();
+        check(!document_.scene().find(meshId), "delete imported mesh");
+        document_.history()->undo();
+        check(document_.scene().find(meshId), "undo mesh deletion");
+        selectBody(meshId);
+        viewport_->fitAll();
+        for (int mode = 0; mode < 4; ++mode) {
+            viewport_->setDisplayMode(Viewport::DisplayMode(mode));
+            QApplication::processEvents();
+            check(viewport_->grabFramebuffer().save(directory + QString("/mesh-mode-%1.png").arg(mode)),
+                  "imported mesh renders in display mode " + QString::number(mode));
+        }
+        viewport_->setDisplayMode(Viewport::DisplayMode::Normal);
+        check(saveFile(directory + "/mesh-project.afcad") && openFile(directory + "/mesh-project.afcad"),
+              "mesh project disk roundtrip");
+        check(document_.scene().find(meshId) && document_.scene().find(meshId)->shape == Shape::Mesh,
+              "project retains mesh data and identity");
+        check(exportObj(directory + "/exchange.obj", document_.scene(), &why), "desktop colored OBJ export");
+        check(openFile(directory + "/exchange.obj"), "desktop OBJ import");
+        check(document_.scene().bodies.size() == 6, "OBJ imports both visible mesh and solid");
+        document_.history()->undo();
+        check(document_.scene().bodies.size() == 4, "OBJ import is one undo transaction");
+        check(!exportStep(directory + "/mesh-not-solid.step", document_.scene(), &why),
+              "mixed mesh STEP export fails clearly");
+        document_.replace(beforeMesh);
         selectBody(solidId);
         viewport_->fitAll();
         QApplication::processEvents();

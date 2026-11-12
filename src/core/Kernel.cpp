@@ -197,9 +197,12 @@ std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &input, int segm
 }
 std::shared_ptr<const SolidData> solidData(const Body &b) {
     initializeKernel();
-    if (b.shape == Shape::Solid) {
+    if (b.shape == Shape::Solid || b.shape == Shape::Mesh) {
         if (!b.solid)
             throw std::runtime_error("实体数据缺失。");
+        if (b.shape == Shape::Mesh && (!b.solid->shape.IsNull() || b.solid->mesh.vertices.isEmpty() ||
+                                       b.solid->mesh.vertices.size() % 3 || !b.solid->bounds.valid))
+            throw std::runtime_error("网格数据类型、顶点或包围盒无效。");
         return b.solid;
     }
     const auto &p = b.params;
@@ -237,6 +240,7 @@ std::shared_ptr<const SolidData> solidData(const Body &b) {
         shape = BRepPrimAPI_MakeTorus(p.radius, p.tubeRadius).Shape();
         break;
     case Shape::Solid:
+    case Shape::Mesh:
         break;
     }
     b.generated = createSolid(shape, p.segments);
@@ -244,6 +248,8 @@ std::shared_ptr<const SolidData> solidData(const Body &b) {
     return b.generated;
 }
 TopoDS_Shape worldShape(const Body &body) {
+    if (body.shape == Shape::Mesh)
+        throw std::runtime_error("网格不是 OCCT 实体，不能进行实体布尔或 STEP 导出。请使用 GLB/OBJ/STL。 ");
     return BRepBuilderAPI_Transform(solidData(body)->shape, placement(body), Standard_True).Shape();
 }
 bool booleanBody(const Body &a, const Body &b, BooleanOp op, Body &result, QString *error) {
