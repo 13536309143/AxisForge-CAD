@@ -185,13 +185,18 @@ bool saveProject(const QString &path, const Scene &scene, QString *error) {
     Scene copy = scene;
     if (!solve(copy, error))
         return false;
+    const auto bytes = serialize(copy);
+    if (bytes.size() > 64 * 1024 * 1024) {
+        if (error)
+            *error = QStringLiteral("项目输出超过64 MiB限制。");
+        return false;
+    }
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         if (error)
             *error = file.errorString();
         return false;
     }
-    auto bytes = serialize(copy);
     if (file.write(bytes) != bytes.size() || !file.commit()) {
         if (error)
             *error = file.errorString();

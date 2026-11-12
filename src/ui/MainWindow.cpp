@@ -937,7 +937,7 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(counts.instances == 1 && counts.visibleInstances == 1 && counts.triangles == 12 &&
                   counts.vertices == 36,
               "scene metrics count box instances triangles and submitted vertices");
-        check(counts.gpuBufferBytes == quint64(36 * 3 + 170) * sizeof(Vertex),
+        check(counts.gpuBufferBytes == quint64(36 + 24 + 170) * sizeof(Vertex),
               "GPU buffer payload includes triangle edges and grid");
         const auto memory = processMemory();
 #if defined(Q_OS_WIN) || defined(Q_OS_LINUX)

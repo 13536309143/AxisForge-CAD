@@ -1,4 +1,5 @@
 #include "Viewport.h"
+#include "core/Kernel.h"
 #include <QKeyEvent>
 #include <QOpenGLContext>
 #include <QPainter>
@@ -155,13 +156,11 @@ void Viewport::rebuild() {
     meshes_.clear();
     grid_.reset();
     for (const auto &body : scene_.bodies) {
-        auto v = tessellate(body).vertices;
+        const auto topology = solidData(body);
+        auto v = topology->mesh.vertices;
         int count = v.size();
-        for (int i = 0; i < count; i += 3) {
-            auto a = v[i], b = v[i + 1], c = v[i + 2];
-            v << a << b << b << c << c << a;
-        }
-        auto gpu = upload(v, count, count * 2, body.id);
+        v += topology->edgeVertices;
+        auto gpu = upload(v, count, topology->edgeVertices.size(), body.id);
         if (gpu)
             meshes_.push_back(std::move(gpu));
     }

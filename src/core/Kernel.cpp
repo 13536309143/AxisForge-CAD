@@ -1,4 +1,5 @@
 #include "Kernel.h"
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -28,6 +29,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Edge.hxx>
 #include <cmath>
 #include <gp_Quaternion.hxx>
 #include <gp_Trsf.hxx>
@@ -87,6 +89,14 @@ std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &input, int segm
         TopExp::MapShapes(e.Current(), TopAbs_FACE, solidFaces);
     if (allFaces.Extent() != solidFaces.Extent())
         throw std::runtime_error("输入包含未封闭曲面，不能作为实体使用。");
+    for (auto kind : {TopAbs_EDGE, TopAbs_VERTEX}) {
+        TopTools_IndexedMapOfShape all, inside;
+        TopExp::MapShapes(shape, kind, all);
+        for (TopExp_Explorer e(shape, TopAbs_SOLID); e.More(); e.Next())
+            TopExp::MapShapes(e.Current(), kind, inside);
+        if (all.Extent() != inside.Extent())
+            throw std::runtime_error("复合体包含不属于实体的线框或孤立点。");
+    }
     auto data = std::make_shared<SolidData>();
     data->shape = shape;
     data->solids = solids;
@@ -149,8 +159,32 @@ std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &input, int segm
                 throw std::runtime_error("显示网格超过100万个三角形限制。");
         }
     }
+    TopTools_IndexedMapOfShape edges;
+    TopExp::MapShapes(shape, TopAbs_EDGE, edges);
+    for (int edgeIndex = 1; edgeIndex <= edges.Extent(); ++edgeIndex) {
+        const auto edge = TopoDS::Edge(edges(edgeIndex));
+        if (BRep_Tool::Degenerated(edge))
+            continue;
+        BRepAdaptor_Curve curve(edge);
+        const double first = curve.FirstParameter(), last = curve.LastParameter();
+        if (!std::isfinite(first) || !std::isfinite(last))
+            continue;
+        const int points = curve.GetType() == GeomAbs_Line ? 2 : qBound(8, segments, 128) + 1;
+        for (int i = 0; i < points - 1; ++i) {
+            const auto a = curve.Value(first + (last - first) * i / (points - 1)),
+                       b = curve.Value(first + (last - first) * (i + 1) / (points - 1));
+            data->edgeVertices << Vertex{{float(a.X()), float(a.Y()), float(a.Z())}, {0, 0, 1}}
+                               << Vertex{{float(b.X()), float(b.Y()), float(b.Z())}, {0, 0, 1}};
+        }
+    }
     if (data->mesh.vertices.isEmpty())
         throw std::runtime_error("实体没有可显示的三角形。");
+    std::ostringstream storage;
+    BRepTools::Write(shape, storage, Standard_False, Standard_False, TopTools_FormatVersion_VERSION_1);
+    const auto raw = storage.str();
+    if (raw.size() > 16 * 1024 * 1024)
+        throw std::runtime_error("单个实体的 B-Rep 数据超过16 MiB限制。");
+    data->brep = qCompress(QByteArray(raw.data(), int(raw.size())), 6).toBase64();
     return data;
 }
 std::shared_ptr<const SolidData> solidData(const Body &b) {
@@ -256,11 +290,7 @@ bool booleanBody(const Body &a, const Body &b, BooleanOp op, Body &result, QStri
     return false;
 }
 QByteArray encodeBrep(const Body &body) {
-    std::ostringstream stream;
-    BRepTools::Write(solidData(body)->shape, stream, Standard_False, Standard_False,
-                     TopTools_FormatVersion_VERSION_1);
-    const std::string data = stream.str();
-    return qCompress(QByteArray(data.data(), int(data.size())), 6).toBase64();
+    return solidData(body)->brep;
 }
 bool decodeBrep(const QByteArray &bytes, Body &body, QString *error) {
     try {

@@ -173,6 +173,8 @@ bool exportStep(const QString &path, const Scene &scene, QString *error) {
         if (!streamWriter.Print(stream))
             throw std::runtime_error("STEP 流写入失败。");
         const std::string data = stream.str();
+        if (data.size() > 64 * 1024 * 1024)
+            throw std::runtime_error("STEP 输出超过64 MiB限制。");
         QSaveFile file(path);
         if (!file.open(QIODevice::WriteOnly) ||
             file.write(data.data(), qint64(data.size())) != qint64(data.size()) || !file.commit())
