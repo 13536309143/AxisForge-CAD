@@ -40,6 +40,9 @@ class MainWindow final : public QMainWindow {
     void addMateDialog();
     void deleteMate();
     void deleteSelection();
+    void buildSceneStats();
+    void updateSceneStats();
+    QLabel *sceneStats_ = nullptr;
     bool mayDiscard();
     void log(const QString &text);
     QString selection_, path_;

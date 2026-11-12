@@ -3,6 +3,7 @@
 #include <QOpenGLContext>
 #include <QPainter>
 #include <QSurfaceFormat>
+#include <QTimer>
 #include <cmath>
 namespace af {
 namespace {
@@ -13,9 +14,58 @@ Viewport::Viewport(QWidget *parent) : QOpenGLWidget(parent) {
     setMinimumSize(480, 360);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    fpsClock_.start();
+    connect(this, &QOpenGLWidget::frameSwapped, this, [this] {
+        ++frames_;
+        ++totalFrames_;
+        if (continuous_ && isVisible())
+            QTimer::singleShot(0, this, [this] {
+                if (continuous_ && isVisible())
+                    update();
+            });
+    });
 }
 Viewport::~Viewport() {
     cleanup();
+}
+void Viewport::setContinuousRendering(bool enabled) {
+    continuous_ = enabled;
+    frames_ = 0;
+    fps_ = 0;
+    fpsClock_.restart();
+    if (enabled)
+        update();
+}
+void Viewport::sampleFrames() {
+    const auto ms = fpsClock_.elapsed();
+    if (ms > 0) {
+        fps_ = frames_ * 1000.0 / ms;
+        frames_ = 0;
+        fpsClock_.restart();
+    }
+}
+Viewport::Metrics Viewport::metrics() const {
+    Metrics m;
+    m.instances = scene_.bodies.size();
+    m.presentedFrames = totalFrames_;
+    for (const auto &b : scene_.bodies)
+        if (b.visible)
+            ++m.visibleInstances;
+    for (const auto &gpu : meshes_) {
+        m.vertices += gpu->count;
+        m.triangles += gpu->count / 3;
+        m.gpuBufferBytes += quint64(gpu->count + gpu->edgeCount) * sizeof(Vertex);
+        const auto *b = scene_.find(gpu->id);
+        if (b && b->visible) {
+            m.visibleVertices += gpu->count;
+            m.visibleTriangles += gpu->count / 3;
+        }
+    }
+    if (grid_)
+        m.gpuBufferBytes += quint64(grid_->count + grid_->edgeCount) * sizeof(Vertex);
+    m.fps = fps_;
+    m.frameMs = fps_ > 0 ? 1000.0 / fps_ : 0;
+    return m;
 }
 void Viewport::setScene(const Scene &s) {
     scene_ = s;

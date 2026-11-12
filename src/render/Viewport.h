@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Geometry.h"
+#include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QOpenGLBuffer>
 #include <QOpenGLFunctions>
@@ -35,6 +36,18 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     }
     QPoint projectPoint(const QVector3D &point) const;
     QString pickAt(const QPoint &point) const;
+    struct Metrics {
+        quint64 triangles = 0, vertices = 0, visibleTriangles = 0, visibleVertices = 0, gpuBufferBytes = 0;
+        int instances = 0, visibleInstances = 0;
+        double fps = 0, frameMs = 0;
+        quint64 presentedFrames = 0;
+    };
+    Metrics metrics() const;
+    void sampleFrames();
+    void setContinuousRendering(bool enabled);
+    bool continuousRendering() const {
+        return continuous_;
+    }
   signals:
     void selected(const QString &id);
     void cameraChanged();
@@ -78,6 +91,10 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     QString dragId_;
     QVector3D dragOrigin_, dragAnchor_, dragNormal_;
     bool moving_ = false;
+    bool continuous_ = false;
+    QElapsedTimer fpsClock_;
+    quint64 frames_ = 0, totalFrames_ = 0;
+    double fps_ = 0;
     std::unique_ptr<QOpenGLShaderProgram> program_;
     std::vector<std::unique_ptr<GpuMesh>> meshes_;
     std::unique_ptr<GpuMesh> grid_;

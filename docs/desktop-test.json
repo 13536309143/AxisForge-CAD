@@ -23,6 +23,13 @@
     "create shape torus",
     "inspector applies name and radius",
     "viewport ray picking",
+    "scene metrics count box instances triangles and submitted vertices",
+    "GPU buffer payload includes triangle edges and grid",
+    "process resident memory available",
+    "scene statistics panel reopens",
+    "continuous FPS samples real frameSwapped events",
+    "startup vertical sync request applied before context creation",
+    "continuous rendering can stop",
     "mouse selection updates inspector",
     "properties panel closes",
     "properties panel reopens from menu",
@@ -40,7 +47,12 @@
     "framebuffer contains rendered CAD geometry",
     "workbench screenshot"
   ],
-  "coloredPixels": 49150,
+  "coloredPixels": 31160,
+  "gpuLocalUsageBytes": 99532800,
+  "gpuMemoryAvailable": true,
+  "measuredFps": 145.63106796116506,
   "renderer": "NVIDIA GeForce RTX 3060/PCIe/SSE2 路 OpenGL 3.3.0 NVIDIA 610.88",
+  "reportedSwapInterval": 1,
+  "requestedVsync": 1,
   "success": true
 }

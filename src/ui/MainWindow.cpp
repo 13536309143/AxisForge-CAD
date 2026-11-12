@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "app/ProcessMemory.h"
 #include "core/Constraints.h"
 #include "core/ProjectIO.h"
 #include <QAction>
@@ -10,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -22,11 +24,14 @@
 #include <QKeyEvent>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProcess>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTextStream>
+#include <QTimer>
 #include <QToolBar>
 #include <QUuid>
 #include <algorithm>
@@ -43,6 +48,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), document_(this) {
     setCentralWidget(viewport_);
     buildActions();
     buildPanels();
+    buildSceneStats();
     setStyleSheet(QStringLiteral(R"(
         QMainWindow,QWidget{background:#161e2b;color:#dce5f2;font-family:'Microsoft YaHei';font-size:12px;}
         QMenuBar{background:#111823;padding:4px;}QMenuBar::item:selected,QMenu::item:selected{background:#2a3a50;}
@@ -360,6 +366,107 @@ void MainWindow::buildPanels() {
     summary_ = new QLabel;
     statusBar()->addPermanentWidget(summary_);
     statusBar()->showMessage(QStringLiteral("参数化建模工作台 · 所有长度单位 mm"));
+}
+void MainWindow::buildSceneStats() {
+    auto *dock = new QDockWidget(QStringLiteral("场景统计 / SCENE METRICS"), this);
+    dock->setObjectName("sceneStatsDock");
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    sceneStats_ = new QLabel;
+    sceneStats_->setObjectName("sceneMetrics");
+    sceneStats_->setTextFormat(Qt::RichText);
+    sceneStats_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    sceneStats_->setWordWrap(true);
+    layout->addWidget(sceneStats_);
+    auto *controls = new QHBoxLayout;
+    auto *continuous = new QCheckBox(QStringLiteral("连续渲染 / 测量 FPS"));
+    continuous->setObjectName("continuousRendering");
+    connect(continuous, &QCheckBox::toggled, viewport_, &Viewport::setContinuousRendering);
+    controls->addWidget(continuous);
+    auto *vsync = new QComboBox;
+    vsync->setObjectName("vsyncMode");
+    vsync->addItem(QStringLiteral("垂直同步：开启"), 1);
+    vsync->addItem(QStringLiteral("垂直同步：关闭"), 0);
+    vsync->setCurrentIndex(qApp->property("requestedVsync").toInt() ? 0 : 1);
+    controls->addWidget(vsync);
+    auto *restart = new QPushButton(QStringLiteral("应用并重启"));
+    controls->addWidget(restart);
+    controls->addStretch();
+    layout->addLayout(controls);
+    auto *note = new QLabel(
+        QStringLiteral("GPU 本地段使用量由匹配显卡的 Windows DXGI 查询，失败显示不可用；缓冲有效载荷仅统计 "
+                       "VBO（含线框/网格/隐藏模型）。顶点含重复；FPS 按实际 "
+                       "frameSwapped 事件计数，非 GPU 耗时。切换同步需重启，驱动/桌面合成器可能覆盖请求。"));
+    note->setWordWrap(true);
+    note->setStyleSheet("color:#8da5b9;font-size:11px;");
+    layout->addWidget(note);
+    connect(restart, &QPushButton::clicked, this, [this, vsync] {
+        if (!mayDiscard())
+            return;
+        const int mode = vsync->currentData().toInt();
+        QStringList args{QString("--vsync=%1").arg(mode)};
+        if (!path_.isEmpty())
+            args << path_;
+        if (!QProcess::startDetached(QCoreApplication::applicationFilePath(), args)) {
+            QMessageBox::warning(this, QStringLiteral("重启失败"),
+                                 QStringLiteral("未能启动新进程，当前窗口和项目保持不变。"));
+            return;
+        }
+        QSettings("AxisForge", "AxisForge CAD").setValue("render/vsync", mode);
+        document_.history()->setClean();
+        close();
+    });
+    dock->setWidget(page);
+    addDockWidget(Qt::BottomDockWidgetArea, dock);
+    auto *logDock = findChild<QDockWidget *>("logDock");
+    if (logDock)
+        tabifyDockWidget(logDock, dock);
+    dock->toggleViewAction()->setObjectName("toggleSceneStats");
+    dock->toggleViewAction()->setShortcut(QKeySequence("Ctrl+Shift+I"));
+    auto *view = menuBar()->addMenu(QStringLiteral("性能"));
+    view->addAction(dock->toggleViewAction());
+    dock->raise();
+    auto *timer = new QTimer(this);
+    timer->setInterval(500);
+    connect(timer, &QTimer::timeout, this, [this] {
+        viewport_->sampleFrames();
+        updateSceneStats();
+    });
+    timer->start();
+    updateSceneStats();
+}
+void MainWindow::updateSceneStats() {
+    const auto m = viewport_->metrics();
+    const auto ram = processMemory();
+    const auto gpu = gpuMemory(viewport_->rendererInfo());
+    auto mib = [](quint64 bytes) { return QString::number(double(bytes) / (1024 * 1024), 'f', 2) + " MiB"; };
+    const int requested = qApp->property("requestedVsync").toInt();
+    sceneStats_->setText(
+        QStringLiteral(
+            "<table cellspacing='7'><tr><td>实例 总/可见</td><td><b>%1 / %2</b></td><td>三角面 "
+            "总/可见</td><td><b>%3 / %4</b></td><td>顶点 总/可见（含重复）</td><td><b>%5 / %6</b></td></tr>"
+            "<tr><td>GPU 缓冲有效载荷</td><td>%7</td><td>进程驻留内存 "
+            "RSS</td><td>%8</td><td>进程私有提交</td><td>%9</td></tr>"
+            "<tr><td>当前 FPS / 平均帧间隔</td><td><b>%10 / %11 ms</b></td><td>同步请求 / "
+            "上下文报告</td><td>%12 / %13</td><td>刷新模式</td><td>%14</td></tr>"
+            "<tr><td>GPU 本地段（进程）</td><td>%15</td><td>GPU 本地段预算</td><td>%16</td></tr></table>")
+            .arg(m.instances)
+            .arg(m.visibleInstances)
+            .arg(m.triangles)
+            .arg(m.visibleTriangles)
+            .arg(m.vertices)
+            .arg(m.visibleVertices)
+            .arg(mib(m.gpuBufferBytes))
+            .arg(ram.available ? mib(ram.resident) : QStringLiteral("不可用"))
+            .arg(ram.privateAvailable ? mib(ram.privateBytes) : QStringLiteral("不可用"))
+            .arg(m.fps, 0, 'f', 1)
+            .arg(m.frameMs, 0, 'f', 2)
+            .arg(requested ? QStringLiteral("ON") : QStringLiteral("OFF"))
+            .arg(viewport_->format().swapInterval())
+            .arg(viewport_->continuousRendering() ? QStringLiteral("连续")
+                                                  : QStringLiteral("按需（静止低 FPS 正常）"))
+            .arg(gpu.available ? mib(gpu.usage) : QStringLiteral("不可用"))
+            .arg(gpu.available ? mib(gpu.budget) : QStringLiteral("不可用")));
 }
 void MainWindow::log(const QString &text) {
     if (log_)
@@ -708,6 +815,40 @@ int MainWindow::runSelfTest(const QString &directory) {
         QApplication::processEvents();
         auto point = viewport_->projectPoint(body.position);
         check(viewport_->pickAt(point) == body.id, "viewport ray picking");
+        viewport_->grabFramebuffer();
+        const auto counts = viewport_->metrics();
+        check(counts.instances == 1 && counts.visibleInstances == 1 && counts.triangles == 12 &&
+                  counts.vertices == 36,
+              "scene metrics count box instances triangles and submitted vertices");
+        check(counts.gpuBufferBytes == quint64(36 * 3 + 170) * sizeof(Vertex),
+              "GPU buffer payload includes triangle edges and grid");
+        const auto memory = processMemory();
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+        check(memory.available && memory.resident > 0, "process resident memory available");
+#endif
+        auto *metricsDock = findChild<QDockWidget *>("sceneStatsDock");
+        metricsDock->close();
+        findChild<QAction *>("toggleSceneStats")->trigger();
+        check(metricsDock->isVisible(), "scene statistics panel reopens");
+        viewport_->setContinuousRendering(true);
+        const auto framesBefore = viewport_->metrics().presentedFrames;
+        QEventLoop measurement;
+        QTimer::singleShot(800, &measurement, &QEventLoop::quit);
+        measurement.exec();
+        viewport_->sampleFrames();
+        const auto measured = viewport_->metrics();
+        check(measured.presentedFrames > framesBefore && measured.fps > 0,
+              "continuous FPS samples real frameSwapped events");
+        report["measuredFps"] = measured.fps;
+        const auto gpuSample = gpuMemory(viewport_->rendererInfo());
+        report["gpuMemoryAvailable"] = gpuSample.available;
+        report["gpuLocalUsageBytes"] = double(gpuSample.usage);
+        report["requestedVsync"] = qApp->property("requestedVsync").toInt();
+        report["reportedSwapInterval"] = viewport_->format().swapInterval();
+        check(QSurfaceFormat::defaultFormat().swapInterval() == qApp->property("requestedVsync").toInt(),
+              "startup vertical sync request applied before context creation");
+        viewport_->setContinuousRendering(false);
+        check(!viewport_->continuousRendering(), "continuous rendering can stop");
         QMouseEvent press(QEvent::MouseButtonPress, QPointF(point), Qt::LeftButton, Qt::LeftButton,
                           Qt::NoModifier);
         QApplication::sendEvent(viewport_, &press);
@@ -797,6 +938,7 @@ int MainWindow::runSelfTest(const QString &directory) {
         viewport_->fitAll();
         QApplication::processEvents();
         auto image = viewport_->grabFramebuffer();
+        updateSceneStats();
         int colored = 0;
         for (int y = 0; y < image.height(); ++y)
             for (int x = 0; x < image.width(); ++x) {
