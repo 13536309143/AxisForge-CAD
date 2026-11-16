@@ -23,7 +23,8 @@ jobs:
           name: test-artifacts
           path: build/test-artifacts
   windows-release:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'release: v0.5.0')
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'release: v0.5.0')
     needs: linux-qt6
     runs-on: windows-2022
     permissions:
@@ -53,3 +54,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create v0.5.0 release/AxisForge-CAD-0.5.0-Windows-x64.zip --target ${{ github.sha }} --title 'AxisForge CAD 0.5.0' --notes-file RELEASE_NOTES.md
+
+
