@@ -2,10 +2,14 @@
 #include "core/Constraints.h"
 #include "core/Kernel.h"
 #include "core/MeshIO.h"
+#include "core/Presentation.h"
 #include "core/ProjectIO.h"
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
 #include <QUndoCommand>
 #include <QUuid>
 #include <algorithm>
+#include <cmath>
 namespace af {
 class SnapshotCommand final : public QUndoCommand {
   public:
@@ -28,6 +32,46 @@ class SnapshotCommand final : public QUndoCommand {
 };
 Document::Document(QObject *parent) : QObject(parent) {
     history_.setUndoLimit(100);
+}
+bool Document::alignToFloor(const QString &id, QString *error) {
+    finishMove(false);
+    Scene candidate = scene_;
+    auto *body = candidate.find(id);
+    QString why;
+    auto bottom = [](const Body &b) {
+        if (b.shape == Shape::Mesh) {
+            double z = 1e30;
+            for (const auto &v : tessellate(b).vertices)
+                z = std::min(z, double(b.matrix().map(v.position).z()));
+            return z;
+        }
+        Bnd_Box bounds;
+        BRepBndLib::AddOptimal(worldShape(b), bounds, false, false);
+        double x, y, z, X, Y, Z;
+        bounds.Get(x, y, z, X, Y, Z);
+        return z;
+    };
+    if (!body)
+        why = QStringLiteral("请先选择模型。");
+    else {
+        Scene one;
+        one.bodies << *body;
+        one.bodies[0].visible = true;
+        body->position.setZ(body->position.z() - bottom(one.bodies[0]));
+        if (solve(candidate, &why)) {
+            one.bodies[0] = *candidate.find(id);
+            one.bodies[0].visible = true;
+            if (std::abs(bottom(one.bodies[0])) <= .001f) {
+                history_.push(new SnapshotCommand(this, scene_, candidate, QStringLiteral("对齐地板")));
+                return true;
+            }
+            why = QStringLiteral("现有配合限制了落地位置；请先调整相关配合。");
+        }
+    }
+    if (error)
+        *error = why;
+    emit rejected(why);
+    return false;
 }
 bool Document::edit(const QString &label, const std::function<void(Scene &)> &operation, QString *error) {
     finishMove(false);

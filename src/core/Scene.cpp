@@ -11,12 +11,15 @@ namespace {
 constexpr double pi = 3.14159265358979323846;
 }
 QString shapeKey(Shape s) {
-    return QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid", "mesh"}.value(int(s));
+    return QStringList{"box",  "sphere", "cylinder", "cone",      "torus", "solid",
+                       "mesh", "tube",   "frustum",  "ellipsoid", "wedge"}
+        .value(int(s));
 }
 QString shapeName(Shape s) {
-    return QStringList{QStringLiteral("长方体"),  QStringLiteral("球体"), QStringLiteral("圆柱"),
-                       QStringLiteral("圆锥"),    QStringLiteral("圆环"), QStringLiteral("OCCT 实体"),
-                       QStringLiteral("网格模型")}
+    return QStringList{QStringLiteral("长方体"),   QStringLiteral("球体"),  QStringLiteral("圆柱"),
+                       QStringLiteral("圆锥"),     QStringLiteral("圆环"),  QStringLiteral("OCCT 实体"),
+                       QStringLiteral("网格模型"), QStringLiteral("圆管"),  QStringLiteral("圆台"),
+                       QStringLiteral("椭球"),     QStringLiteral("楔形体")}
         .value(int(s));
 }
 QString mateKey(MateType t) {
@@ -73,7 +76,7 @@ bool Scene::validate(QString *error) const {
         if (b.id.isEmpty() || b.id.size() > 80 || ids.contains(b.id))
             return fail(QStringLiteral("模型 ID 缺失或重复。"));
         ids.insert(b.id);
-        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 6 ||
+        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 10 ||
             !b.color.isValid())
             return fail(QStringLiteral("模型名称、类型或颜色无效。"));
         for (double value :
@@ -82,6 +85,8 @@ bool Scene::validate(QString *error) const {
                 return fail(QStringLiteral("尺寸必须在 0.1～10000 mm 之间。"));
         if (b.params.segments < 8 || b.params.segments > 128)
             return fail(QStringLiteral("细分数必须在 8～128 之间。"));
+        if ((b.shape == Shape::Tube || b.shape == Shape::Frustum) && b.params.tubeRadius >= b.params.radius)
+            return fail(QStringLiteral("内半径／顶半径必须小于外半径／底半径。"));
         if (b.shape == Shape::Torus && b.params.tubeRadius >= b.params.radius)
             return fail(QStringLiteral("圆环管半径必须小于主半径。"));
         for (float value : {b.position.x(), b.position.y(), b.position.z()})

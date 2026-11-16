@@ -6,6 +6,7 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
+#include <BRepBuilderAPI_GTransform.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
@@ -15,6 +16,7 @@
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
 #include <BRepPrimAPI_MakeTorus.hxx>
+#include <BRepPrimAPI_MakeWedge.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
@@ -33,6 +35,7 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <cmath>
+#include <gp_GTrsf.hxx>
 #include <gp_Quaternion.hxx>
 #include <gp_Trsf.hxx>
 #include <mutex>
@@ -111,7 +114,7 @@ std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &input, int segm
     data->faces = faces;
     data->edges = countShapes(shape, TopAbs_EDGE);
     GProp_GProps props;
-    BRepGProp::VolumeProperties(shape, props);
+    BRepGProp::VolumeProperties(shape, props, 1e-9);
     data->volume = props.Mass();
     BRepGProp::SurfaceProperties(shape, props);
     data->area = props.Mass();
@@ -238,6 +241,33 @@ std::shared_ptr<const SolidData> solidData(const Body &b) {
         break;
     case Shape::Torus:
         shape = BRepPrimAPI_MakeTorus(p.radius, p.tubeRadius).Shape();
+        break;
+    case Shape::Tube: {
+        auto axis = gp_Ax2(gp_Pnt(0, 0, -p.height / 2), gp_Dir(0, 0, 1));
+        shape = BRepAlgoAPI_Cut(BRepPrimAPI_MakeCylinder(axis, p.radius, p.height).Shape(),
+                                BRepPrimAPI_MakeCylinder(axis, p.tubeRadius, p.height).Shape())
+                    .Shape();
+        break;
+    }
+    case Shape::Frustum:
+        shape = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, -p.height / 2), gp_Dir(0, 0, 1)), p.radius,
+                                     p.tubeRadius, p.height)
+                    .Shape();
+        break;
+    case Shape::Ellipsoid: {
+        gp_GTrsf transform;
+        transform.SetValue(1, 1, p.width / 2);
+        transform.SetValue(2, 2, p.depth / 2);
+        transform.SetValue(3, 3, p.height / 2);
+        shape =
+            BRepBuilderAPI_GTransform(BRepPrimAPI_MakeSphere(1).Shape(), transform, Standard_True).Shape();
+        break;
+    }
+    case Shape::Wedge:
+        shape =
+            BRepPrimAPI_MakeWedge(gp_Ax2(gp_Pnt(-p.width / 2, -p.depth / 2, -p.height / 2), gp_Dir(0, 0, 1)),
+                                  p.width, p.depth, p.height, 0)
+                .Shape();
         break;
     case Shape::Solid:
     case Shape::Mesh:

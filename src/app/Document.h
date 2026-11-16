@@ -26,6 +26,7 @@ class Document : public QObject {
                              QString *error = nullptr);
     bool importStepFile(const QString &path, QString *error = nullptr);
     bool importMesh(const QString &path, QString *error = nullptr, QStringList *warnings = nullptr);
+    bool alignToFloor(const QString &id, QString *error = nullptr);
     void beginMove(const QString &id);
     void previewMove(const QString &id, const QVector3D &position);
     void finishMove(bool commit);

@@ -95,8 +95,11 @@ QByteArray serialize(const Scene &s) {
                                  {"enabled", m.enabled}});
     return QJsonDocument(
                QJsonObject{{"format", "axisforge.project"},
-                           {"version", std::any_of(s.mates.begin(), s.mates.end(),
-                                                   [](const Mate &m) { return int(m.type) >= 4; })
+                           {"version", std::any_of(s.bodies.begin(), s.bodies.end(),
+                                                   [](const Body &b) { return int(b.shape) >= 7; })
+                                           ? 5
+                                       : std::any_of(s.mates.begin(), s.mates.end(),
+                                                     [](const Mate &m) { return int(m.type) >= 4; })
                                            ? 4
                                        : std::any_of(s.bodies.begin(), s.bodies.end(),
                                                      [](const Body &b) { return b.shape == Shape::Mesh; })
@@ -124,7 +127,8 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
         const auto root = doc.object();
         if (string(root, "format") != "axisforge.project" ||
             (integer(root, "version") != 1 && integer(root, "version") != 2 &&
-             integer(root, "version") != 3 && integer(root, "version") != 4) ||
+             integer(root, "version") != 3 && integer(root, "version") != 4 &&
+             integer(root, "version") != 5) ||
             string(root, "units") != "mm")
             return fail(QStringLiteral("不支持的项目格式、版本或单位。"));
         if (!root["bodies"].isArray() || !root["mates"].isArray())
@@ -141,11 +145,14 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             Body b;
             b.id = string(o, "id");
             b.name = string(o, "name");
-            int shape = QStringList{"box", "sphere", "cylinder", "cone", "torus", "solid", "mesh"}.indexOf(
-                string(o, "shape"));
+            int shape = QStringList{"box",  "sphere", "cylinder", "cone",      "torus", "solid",
+                                    "mesh", "tube",   "frustum",  "ellipsoid", "wedge"}
+                            .indexOf(string(o, "shape"));
             if (shape < 0)
                 throw std::runtime_error("Unknown shape");
             b.shape = Shape(shape);
+            if (shape >= 7 && integer(root, "version") < 5)
+                throw std::runtime_error("新增图元需要项目 version 5。");
             if (!o["parameters"].isObject())
                 throw std::runtime_error("Missing parameters");
             auto p = o["parameters"].toObject();

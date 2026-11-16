@@ -33,10 +33,12 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QUuid>
 #include <algorithm>
 #include <cmath>
@@ -222,7 +224,22 @@ void MainWindow::buildActions() {
     auto *brand = new QLabel("AXISFORGE");
     brand->setObjectName("brand");
     toolbar->addWidget(brand);
-    toolbar->addAction(deleteAction);
+    auto *fileTools = addToolBar(QStringLiteral("文件与编辑"));
+    fileTools->setObjectName("fileToolbar");
+    for (auto name : {"newProject","openProject","saveProject"}) fileTools->addAction(findChild<QAction *>(name));
+    findChild<QAction *>("openProject")->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
+    findChild<QAction *>("saveProject")->setIcon(style()->standardIcon(QStyle::SP_DialogSaveButton));
+    fileTools->addSeparator();
+    fileTools->addAction(undo);
+    fileTools->addAction(redo);
+    auto *deleteButton = new QToolButton;
+    deleteButton->setDefaultAction(deleteAction);
+    deleteButton->setText(QStringLiteral("删除"));
+    fileTools->addWidget(deleteButton);
+    insertToolBar(toolbar,fileTools);
+    insertToolBarBreak(toolbar);
+    auto *shapeMenu = new QMenu(QStringLiteral("更多模型"), this);
+
     for (int i = 0; i < 5; ++i) {
         auto shape = Shape(i);
         auto *a = action(create, shapeName(shape), QString("Ctrl+%1").arg(i + 1), "create" + shapeKey(shape),
@@ -233,7 +250,27 @@ void MainWindow::buildActions() {
                          });
         toolbar->addAction(a);
     }
-    toolbar->addSeparator();
+    for (auto shape : {Shape::Tube, Shape::Frustum, Shape::Ellipsoid, Shape::Wedge}) {
+        auto *a = action(create, shapeName(shape), {}, "create" + shapeKey(shape), [this, shape] {
+            selectBody(document_.addBody(shape));
+            viewport_->fitAll();
+        });
+        shapeMenu->addAction(a);
+    }
+    auto *more = new QToolButton;
+    more->setText(QStringLiteral("更多模型 ▾"));
+    more->setMenu(shapeMenu);
+    more->setPopupMode(QToolButton::InstantPopup);
+    toolbar->addWidget(more);
+    auto *placement = addToolBar(QStringLiteral("装配与定位"));
+    placement->setObjectName("placementToolbar");
+    auto *floorAction = action(assembly, QStringLiteral("对齐地板"), "Ctrl+G", "alignFloor", [this] {
+        QString why;
+        if (!document_.alignToFloor(selection_, &why))
+            statusBar()->showMessage(why, 7000);
+    });
+    floorAction->setToolTip(QStringLiteral("将所选模型最低点对齐世界 Z=0，保留配合并支持撤销"));
+    placement->addAction(floorAction);
     auto *solidMenu = menuBar()->addMenu(QStringLiteral("实体"));
     const QStringList operationNames = {QStringLiteral("布尔并集 A ∪ B"), QStringLiteral("布尔差集 A − B"),
                                         QStringLiteral("布尔交集 A ∩ B")};
@@ -261,18 +298,19 @@ void MainWindow::buildActions() {
     });
     auto *booleanButton = new QAction(QStringLiteral("布尔运算"), this);
     connect(booleanButton, &QAction::triggered, this, [this] { booleanDialog(BooleanOp::Cut); });
-    toolbar->addAction(booleanButton);
+    placement->addAction(booleanButton);
     auto *mate =
         action(assembly, QStringLiteral("添加配合…"), "Ctrl+M", "addMate", [this] { addMateDialog(); });
-    toolbar->addAction(mate);
+    placement->addAction(mate);
     action(assembly, QStringLiteral("编辑选中配合…"), "Ctrl+Shift+M", "editMate", [this] {
         if (!mateSelection_.isEmpty())
             openMateEditor(mateSelection_);
     });
     action(assembly, QStringLiteral("删除选中配合"), {}, "deleteMate", [this] { deleteMate(); });
-    toolbar->addSeparator();
+    auto *viewTools = addToolBar(QStringLiteral("视图"));
+    viewTools->setObjectName("viewToolbar");
     auto *fit = action(viewMenu, QStringLiteral("适应全部"), "F", "fitAll", [this] { viewport_->fitAll(); });
-    toolbar->addAction(fit);
+    viewTools->addAction(fit);
     const QStringList labels = {QStringLiteral("等轴测"), QStringLiteral("前视图"), QStringLiteral("右视图"),
                                 QStringLiteral("俯视图")};
     for (int i = 0; i < 4; ++i)
@@ -301,7 +339,7 @@ void MainWindow::buildActions() {
                 [this, i] { viewport_->setDisplayMode(Viewport::DisplayMode(i)); });
         modePicker->addItem(modeLabels[i]);
     }
-    toolbar->addWidget(modePicker);
+    viewTools->addWidget(modePicker);
     connect(modePicker, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int i) { viewport_->setDisplayMode(Viewport::DisplayMode(i)); });
     connect(viewport_, &Viewport::displayModeChanged, this, [modePicker, modes](int index) {
@@ -452,7 +490,7 @@ void MainWindow::buildPanels() {
     addNumber(df, "depth", QStringLiteral("深度 Y"), 0.1, 10000, " mm");
     addNumber(df, "height", QStringLiteral("高度 Z"), 0.1, 10000, " mm");
     addNumber(df, "radius", QStringLiteral("半径 / 主半径"), 0.1, 10000, " mm");
-    addNumber(df, "tubeRadius", QStringLiteral("圆环管半径"), 0.1, 10000, " mm");
+    addNumber(df, "tubeRadius", QStringLiteral("次半径"), 0.1, 10000, " mm");
     segments_ = new QSpinBox;
     segments_->setObjectName("segments");
     segments_->setRange(8, 128);
@@ -698,14 +736,19 @@ void MainWindow::showProperties() {
     numbers_["radius"]->setValue(p.radius);
     numbers_["tubeRadius"]->setValue(p.tubeRadius);
     segments_->setValue(p.segments);
-    numbers_["width"]->setEnabled(b->shape == Shape::Box);
-    numbers_["depth"]->setEnabled(b->shape == Shape::Box);
+    const bool dimensions =
+        b->shape == Shape::Box || b->shape == Shape::Ellipsoid || b->shape == Shape::Wedge;
+    numbers_["width"]->setEnabled(dimensions);
+    numbers_["depth"]->setEnabled(dimensions);
     numbers_["height"]->setEnabled(b->shape == Shape::Box || b->shape == Shape::Cylinder ||
-                                   b->shape == Shape::Cone);
+                                   b->shape == Shape::Cone || b->shape == Shape::Tube ||
+                                   b->shape == Shape::Frustum || dimensions);
     numbers_["radius"]->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid &&
-                                   b->shape != Shape::Mesh);
-    numbers_["tubeRadius"]->setEnabled(b->shape == Shape::Torus);
-    segments_->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid && b->shape != Shape::Mesh);
+                                   b->shape != Shape::Mesh && !dimensions);
+    numbers_["tubeRadius"]->setEnabled(b->shape == Shape::Torus || b->shape == Shape::Tube ||
+                                       b->shape == Shape::Frustum);
+    segments_->setEnabled(b->shape != Shape::Box && b->shape != Shape::Solid && b->shape != Shape::Mesh &&
+                          !dimensions);
     for (const auto &key : QStringList{"width", "depth", "height", "radius", "tubeRadius"}) {
         auto *spin = numbers_[key];
         spin->setSpecialValueText(
@@ -1240,6 +1283,7 @@ int MainWindow::runSelfTest(const QString &directory) {
               "mixed mesh STEP export fails clearly");
         document_.replace(beforeMesh);
 #include "mate_checks.inc"
+#include "release_checks.inc"
         document_.replace(beforeMesh);
         selectBody(solidId);
         viewport_->fitAll();
