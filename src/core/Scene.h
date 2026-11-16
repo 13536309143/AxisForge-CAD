@@ -10,7 +10,7 @@
 namespace af {
 enum class Shape { Box, Sphere, Cylinder, Cone, Torus, Solid, Mesh, Tube, Frustum, Ellipsoid, Wedge };
 struct SolidData;
-enum class MateType { Coaxial, Parallel, Perpendicular, Distance, Coincident, Angle, AxialOffset };
+enum class MateType { Coaxial, Parallel, Perpendicular, Distance, Coincident, Angle, AxialOffset, Ground };
 QString shapeKey(Shape shape);
 QString shapeName(Shape shape);
 QString mateKey(MateType type);

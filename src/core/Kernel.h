@@ -14,6 +14,7 @@ struct SolidData {
 };
 std::shared_ptr<const SolidData> solidData(const Body &body);
 std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &shape, int segments = 48);
+double minimumWorldZ(const Body &body);
 TopoDS_Shape worldShape(const Body &body);
 bool booleanBody(const Body &a, const Body &b, BooleanOp op, Body &result, QString *error = nullptr);
 QByteArray encodeBrep(const Body &body);

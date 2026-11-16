@@ -50,8 +50,8 @@ void MainWindow::openMateEditor(const QString &editId) {
         mateEditor_->activateWindow();
         return;
     }
-    if (document_.scene().bodies.size() < 2) {
-        statusBar()->showMessage(QStringLiteral("至少创建两个模型才能添加配合。"), 5000);
+    if (document_.scene().bodies.isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("请先创建或导入一个模型。"), 5000);
         return;
     }
     document_.finishMove(false);
@@ -104,10 +104,15 @@ void MainWindow::openMateEditor(const QString &editId) {
         source->addItem(b.name, b.id);
         target->addItem(b.name, b.id);
     }
+    source->addItem(QStringLiteral("固定地面 Z=0"), "@ground");
+    if (!existing && document_.scene().bodies.size() == 1)
+        state->draft.type = MateType::Ground;
     source->setCurrentIndex(qMax(0, source->findData(existing ? existing->source : selection_)));
     target->setCurrentIndex(existing ? target->findData(existing->target)
-                                     : (source->currentIndex() == 0 ? 1 : 0));
-    for (int i = 0; i < 7; ++i)
+                                     : (document_.scene().bodies.size() == 1 ? 0
+                                        : source->currentIndex() == 0        ? 1
+                                                                             : 0));
+    for (int i = 0; i < 8; ++i)
         type->addItem(mateName(MateType(i)), i);
     type->setCurrentIndex(int(state->draft.type));
     sa->addItems({"X", "Y", "Z"});
@@ -159,6 +164,8 @@ void MainWindow::openMateEditor(const QString &editId) {
         m.source = source->currentData().toString();
         m.target = target->currentData().toString();
         m.type = MateType(type->currentData().toInt());
+        if (m.type == MateType::Ground)
+            m.source = "@ground";
         m.sourceAxis = sa->currentIndex();
         m.targetAxis = ta->currentIndex();
         m.distance = distance->value();
@@ -170,13 +177,36 @@ void MainWindow::openMateEditor(const QString &editId) {
     auto update = [=] {
         if (state->committing)
             return;
-        const auto m = read();
+        auto m = read();
         const auto t = m.type;
+        const bool ground = t == MateType::Ground;
+        {
+            QSignalBlocker block(source);
+            if (ground)
+                source->setCurrentIndex(source->findData("@ground"));
+            else if (source->currentData().toString() == "@ground")
+                source->setCurrentIndex(0);
+        }
+        source->setEnabled(!ground);
+        pickA->setEnabled(!ground);
+        pickPair->setEnabled(!ground);
+        swap->setEnabled(!ground);
+        if (ground && state->pick != 2)
+            state->pick = 0;
+        {
+            QSignalBlocker block(offset);
+            offset->setRange(ground ? 0 : -1000000, 1000000);
+        }
+        if (auto *label = qobject_cast<QLabel *>(form->labelForField(offset)))
+            label->setText(ground ? QStringLiteral("离地距离") : QStringLiteral("沿轴偏移"));
+
+        m = read();
         distance->setEnabled(t == MateType::Distance);
         angle->setEnabled(t == MateType::Angle);
-        offset->setEnabled(t == MateType::AxialOffset);
-        sa->setEnabled(t != MateType::Distance && t != MateType::Coincident);
-        ta->setEnabled(t != MateType::Distance && t != MateType::Coincident && t != MateType::AxialOffset);
+        offset->setEnabled(t == MateType::AxialOffset || ground);
+        sa->setEnabled(!ground && t != MateType::Distance && t != MateType::Coincident);
+        ta->setEnabled(!ground && t != MateType::Distance && t != MateType::Coincident &&
+                       t != MateType::AxialOffset);
         const QStringList help = {
             QStringLiteral("同轴：轴线重合，保留沿轴滑动和绕轴旋转。"),
             QStringLiteral("平行：包含反平行，不约束位置。"),
@@ -186,7 +216,11 @@ void MainWindow::openMateEditor(const QString &editId) {
             QStringLiteral("指定夹角：有向轴之间的 0～180°，不约束位置。"),
             QStringLiteral("沿轴偏移：B−A 在 A "
                            "所选正向轴上的有符号投影；保留径向位置和姿态。与同轴组合可定位轴向位置。")};
-        explanation->setText(help.value(int(t)));
+        explanation->setText(
+            ground
+                ? QStringLiteral("固定地面 Z=0，持续调整模型高度。沿轴偏移字段在此表示非负离地距离；不改变 "
+                                 "X/Y 和旋转。固定模型请先取消固定。")
+                : help.value(int(t)));
         Scene candidate = document_.scene();
         QString why;
         if (!editId.isEmpty() && !findMate(candidate, editId))

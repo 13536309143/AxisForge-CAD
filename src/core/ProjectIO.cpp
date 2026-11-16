@@ -95,8 +95,11 @@ QByteArray serialize(const Scene &s) {
                                  {"enabled", m.enabled}});
     return QJsonDocument(
                QJsonObject{{"format", "axisforge.project"},
-                           {"version", std::any_of(s.bodies.begin(), s.bodies.end(),
-                                                   [](const Body &b) { return int(b.shape) >= 7; })
+                           {"version", std::any_of(s.mates.begin(), s.mates.end(),
+                                                   [](const Mate &m) { return m.type == MateType::Ground; })
+                                           ? 6
+                                       : std::any_of(s.bodies.begin(), s.bodies.end(),
+                                                     [](const Body &b) { return int(b.shape) >= 7; })
                                            ? 5
                                        : std::any_of(s.mates.begin(), s.mates.end(),
                                                      [](const Mate &m) { return int(m.type) >= 4; })
@@ -128,7 +131,7 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
         if (string(root, "format") != "axisforge.project" ||
             (integer(root, "version") != 1 && integer(root, "version") != 2 &&
              integer(root, "version") != 3 && integer(root, "version") != 4 &&
-             integer(root, "version") != 5) ||
+             integer(root, "version") != 5 && integer(root, "version") != 6) ||
             string(root, "units") != "mm")
             return fail(QStringLiteral("不支持的项目格式、版本或单位。"));
         if (!root["bodies"].isArray() || !root["mates"].isArray())
@@ -194,11 +197,13 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             m.source = string(o, "source");
             m.target = string(o, "target");
             int type = QStringList{"coaxial",    "parallel", "perpendicular", "distance",
-                                   "coincident", "angle",    "axialOffset"}
+                                   "coincident", "angle",    "axialOffset",   "ground"}
                            .indexOf(string(o, "type"));
             if (type < 0)
                 throw std::runtime_error("Unknown mate");
             m.type = MateType(type);
+            if (m.type == MateType::Ground && integer(root, "version") < 6)
+                throw std::runtime_error("地面配合需要项目 version 6。");
             m.sourceAxis = integer(o, "sourceAxis");
             m.targetAxis = integer(o, "targetAxis");
             m.distance = number(o, "distance");

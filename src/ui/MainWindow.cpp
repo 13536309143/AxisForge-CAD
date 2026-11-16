@@ -226,7 +226,8 @@ void MainWindow::buildActions() {
     toolbar->addWidget(brand);
     auto *fileTools = addToolBar(QStringLiteral("文件与编辑"));
     fileTools->setObjectName("fileToolbar");
-    for (auto name : {"newProject","openProject","saveProject"}) fileTools->addAction(findChild<QAction *>(name));
+    for (auto name : {"newProject", "openProject", "saveProject"})
+        fileTools->addAction(findChild<QAction *>(name));
     findChild<QAction *>("openProject")->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
     findChild<QAction *>("saveProject")->setIcon(style()->standardIcon(QStyle::SP_DialogSaveButton));
     fileTools->addSeparator();
@@ -236,7 +237,7 @@ void MainWindow::buildActions() {
     deleteButton->setDefaultAction(deleteAction);
     deleteButton->setText(QStringLiteral("删除"));
     fileTools->addWidget(deleteButton);
-    insertToolBar(toolbar,fileTools);
+    insertToolBar(toolbar, fileTools);
     insertToolBarBreak(toolbar);
     auto *shapeMenu = new QMenu(QStringLiteral("更多模型"), this);
 
@@ -266,8 +267,24 @@ void MainWindow::buildActions() {
     placement->setObjectName("placementToolbar");
     auto *floorAction = action(assembly, QStringLiteral("对齐地板"), "Ctrl+G", "alignFloor", [this] {
         QString why;
-        if (!document_.alignToFloor(selection_, &why))
-            statusBar()->showMessage(why, 7000);
+        const auto *selectedRelation = findMate(document_.scene(), mateSelection_);
+        const QString targetId = !selection_.isEmpty() ? selection_
+                                 : selectedRelation && selectedRelation->type == MateType::Ground
+                                     ? selectedRelation->target
+                                     : QString();
+        if (!document_.alignToFloor(targetId, &why)) {
+            if (!selfTesting_)
+                QMessageBox::warning(this, QStringLiteral("地面对齐配合未建立"), why);
+            log(why);
+        } else {
+            for (const auto &m : document_.scene().mates)
+                if (m.type == MateType::Ground && m.target == targetId) {
+                    const QString id = m.id;
+                    selectMate(id);
+                    break;
+                }
+            log(QStringLiteral("已建立模型与地面的持续配合；地面固定 Z=0。"));
+        }
     });
     floorAction->setToolTip(QStringLiteral("将所选模型最低点对齐世界 Z=0，保留配合并支持撤销"));
     placement->addAction(floorAction);
@@ -664,7 +681,9 @@ void MainWindow::refresh() {
     for (const auto &m : document_.scene().mates) {
         auto *item = new QTreeWidgetItem(mateTree_);
         auto a = document_.scene().find(m.source), b = document_.scene().find(m.target);
-        item->setText(0, mateName(m.type) + " · " + (a ? a->name : "?") + " → " + (b ? b->name : "?"));
+        item->setText(0, mateName(m.type) + " · " +
+                             (m.type == MateType::Ground ? QStringLiteral("地面 Z=0") : (a ? a->name : "?")) +
+                             " → " + (b ? b->name : "?"));
         item->setData(0, Qt::UserRole, m.id);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(0, m.enabled ? Qt::Checked : Qt::Unchecked);
@@ -1282,6 +1301,7 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(!exportStep(directory + "/mesh-not-solid.step", document_.scene(), &why),
               "mixed mesh STEP export fails clearly");
         document_.replace(beforeMesh);
+#include "ground_checks.inc"
 #include "mate_checks.inc"
 #include "release_checks.inc"
         document_.replace(beforeMesh);

@@ -277,6 +277,20 @@ std::shared_ptr<const SolidData> solidData(const Body &b) {
     b.geometryKey = key;
     return b.generated;
 }
+double minimumWorldZ(const Body &body) {
+    if (body.shape == Shape::Mesh) {
+        double z = 1e30;
+        const auto matrix = body.matrix();
+        for (const auto &v : tessellate(body).vertices)
+            z = std::min(z, double(matrix.map(v.position).z()));
+        return z;
+    }
+    Bnd_Box box;
+    BRepBndLib::AddOptimal(worldShape(body), box, false, false);
+    double x, y, z, X, Y, Z;
+    box.Get(x, y, z, X, Y, Z);
+    return z;
+}
 TopoDS_Shape worldShape(const Body &body) {
     if (body.shape == Shape::Mesh)
         throw std::runtime_error("网格不是 OCCT 实体，不能进行实体布尔或 STEP 导出。请使用 GLB/OBJ/STL。 ");

@@ -1,4 +1,5 @@
 #include "Constraints.h"
+#include "Kernel.h"
 #include <QHash>
 #include <QStringList>
 #include <QtMath>
@@ -6,6 +7,11 @@
 namespace af {
 Residual residual(const Scene &s, const Mate &m) {
     Residual r;
+    if (m.type == MateType::Ground) {
+        auto b = s.find(m.target);
+        r.linear = b ? std::abs(minimumWorldZ(*b) - m.offset) : 1e20;
+        return r;
+    }
     auto a = s.find(m.source), b = s.find(m.target);
     if (!a || !b) {
         r.linear = 1e20;
@@ -44,7 +50,7 @@ bool solve(Scene &scene, QString *error) {
     for (const auto &b : work.bodies)
         indegree[b.id] = 0;
     for (const auto &m : work.mates)
-        if (m.enabled) {
+        if (m.enabled && m.type != MateType::Ground) {
             ++indegree[m.target];
             next[m.source].push_back(m.target);
         }
@@ -66,6 +72,10 @@ bool solve(Scene &scene, QString *error) {
             for (const auto &m : work.mates) {
                 if (!m.enabled || m.target != id)
                     continue;
+                if (m.type == MateType::Ground) {
+                    b->position.setZ(float(b->position.z() + m.offset - minimumWorldZ(*b)));
+                    continue;
+                }
                 const Body *a = work.find(m.source);
                 const auto sourceAxis = a->axis(m.sourceAxis);
                 auto targetAxis = b->axis(m.targetAxis);

@@ -347,6 +347,7 @@ int main(int argc, char **argv) {
 #include "mesh_cases.inc"
 #include "presentation_cases.inc"
 #include "new_shapes.inc"
+#include "ground_cases.inc"
     out << "\n" << passed << " passed, " << failed << " failed\n";
     return failed ? 1 : 0;
 }

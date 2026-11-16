@@ -68,6 +68,32 @@ MateGuide mateGuide(const Scene &scene, const Mate &m) {
     g.source = m.source;
     g.target = m.target;
     g.enabled = m.enabled;
+    if (m.type == MateType::Ground) {
+        const auto *body = scene.find(m.target);
+        if (!body)
+            return g;
+        g.valid = true;
+        g.visible = body->visible;
+        g.satisfied = residual(scene, m).satisfied();
+        g.title = QStringLiteral("地面对齐") +
+                  (m.enabled ? (g.satisfied ? QStringLiteral(" · 满足") : QStringLiteral(" · 未满足"))
+                             : QStringLiteral(" · 已停用"));
+        g.detail = QStringLiteral("固定地面 Z=0 → %1 · 离地 %2 mm").arg(body->name).arg(m.offset);
+        if (g.visible) {
+            auto p = body->position;
+            p.setZ(float(minimumWorldZ(*body)));
+            auto q = p;
+            q.setZ(0);
+            const QColor c = m.enabled ? measureColor : QColor("#a1a8b4");
+            g.lines << GuideLine{p, q, c, true};
+            float size = qMax(8.f, solidData(*body)->bounds.radius() * .4f);
+            g.lines << GuideLine{q - QVector3D(size, 0, 0), q + QVector3D(size, 0, 0), c, false}
+                    << GuideLine{q - QVector3D(0, size, 0), q + QVector3D(0, size, 0), c, false};
+            g.labels << GuideLabel{
+                q, QStringLiteral("地面 Z=0 · 离地 %1 mm").arg(minimumWorldZ(*body), 0, 'f', 3), c};
+        }
+        return g;
+    }
     auto a = scene.find(m.source), b = scene.find(m.target);
     if (!a || !b || a == b)
         return g;
@@ -120,6 +146,8 @@ MateGuide mateGuide(const Scene &scene, const Mate &m) {
     cross(originA, sourceColor);
     cross(originB, targetColor);
     switch (m.type) {
+    case MateType::Ground:
+        break;
     case MateType::Coaxial:
         length = qMax(length, delta.length() * .65f + length * .25f);
         axis(originA, u, sourceColor, "A " + QString("XYZ").mid(m.sourceAxis, 1));

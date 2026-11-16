@@ -55,7 +55,7 @@
     check(editor && !editor->isModal(), "mate editor allows scene interaction");
     auto *preview = editor->findChild<QCheckBox *>("matePreview");
     preview->setChecked(false);
-    check(editor->findChild<QComboBox *>("mateType")->count() == 7, "seven mate types available");
+    check(editor->findChild<QComboBox *>("mateType")->count() == 8, "seven mate types available");
     editor->findChild<QPushButton *>("matePickPair")->click();
     for (const auto &pickedBody : pair.bodies) {
         auto pickedPoint = viewport_->projectPoint(pickedBody.position);

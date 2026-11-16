@@ -24,13 +24,13 @@ QString shapeName(Shape s) {
 }
 QString mateKey(MateType t) {
     return QStringList{"coaxial",    "parallel", "perpendicular", "distance",
-                       "coincident", "angle",    "axialOffset"}
+                       "coincident", "angle",    "axialOffset",   "ground"}
         .value(int(t));
 }
 QString mateName(MateType t) {
     return QStringList{QStringLiteral("同轴"),     QStringLiteral("平行"),     QStringLiteral("垂直"),
                        QStringLiteral("中心距离"), QStringLiteral("原点重合"), QStringLiteral("指定夹角"),
-                       QStringLiteral("沿轴偏移")}
+                       QStringLiteral("沿轴偏移"), QStringLiteral("地面对齐")}
         .value(int(t));
 }
 QMatrix4x4 Body::matrix() const {
@@ -73,7 +73,7 @@ bool Scene::validate(QString *error) const {
     qint64 meshVertices = 0;
     auto finite = [](double v) { return std::isfinite(v); };
     for (const auto &b : bodies) {
-        if (b.id.isEmpty() || b.id.size() > 80 || ids.contains(b.id))
+        if (b.id.isEmpty() || b.id == "@ground" || b.id.size() > 80 || ids.contains(b.id))
             return fail(QStringLiteral("模型 ID 缺失或重复。"));
         ids.insert(b.id);
         if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 10 ||
@@ -115,13 +115,17 @@ bool Scene::validate(QString *error) const {
         if (m.id.isEmpty() || m.id.size() > 80 || mateIds.contains(m.id))
             return fail(QStringLiteral("约束 ID 缺失或重复。"));
         mateIds.insert(m.id);
-        if (!ids.contains(m.source) || !ids.contains(m.target) || m.source == m.target)
+        if (!ids.contains(m.target) ||
+            (m.type == MateType::Ground ? m.source != "@ground"
+                                        : (!ids.contains(m.source) || m.source == m.target)))
             return fail(QStringLiteral("约束引用不存在的模型或自身。"));
         if (m.sourceAxis < 0 || m.sourceAxis > 2 || m.targetAxis < 0 || m.targetAxis > 2 || int(m.type) < 0 ||
-            int(m.type) > 6)
+            int(m.type) > 7)
             return fail(QStringLiteral("约束类型或轴无效。"));
         if (!finite(m.distance) || m.distance < 0 || m.distance > 1000000)
             return fail(QStringLiteral("约束距离无效。"));
+        if (m.type == MateType::Ground && m.offset < 0)
+            return fail(QStringLiteral("离地距离不能为负。"));
         if (!finite(m.angle) || m.angle < 0 || m.angle > 180 || !finite(m.offset) ||
             std::abs(m.offset) > 1000000)
             return fail(QStringLiteral("夹角需在 0～180°，轴向偏移需在 ±1000000 mm。"));
