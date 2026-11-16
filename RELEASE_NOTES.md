@@ -24,3 +24,9 @@ Windows包包含Qt与OCCT运行依赖，不包含开发SDK或显卡驱动。Qt6 
 ## 实现范围
 
 1.0.0不包含草图约束、完整特征历史、闭环工业装配、IGES或完整纹理／动画。布尔结果为独立快照；网格不能直接参与实体布尔。格式限制详见README及docs。
+
+
+## 文档资源校验修正
+
+命名的 Windows / Source 归档已重新打包，修正 README 截图并加入 PNG 完整性校验；应用 src、tests 与 CMake 配置与原始 v1.0.0 标签保持一致，标签不移动。建议下载上面命名的 Source.zip：GitHub 自动生成的 Source code 归档仍使用原标签的文档资源。附件构建提交见运行目录 BUILD_INFO.txt 与发布流水线。
+

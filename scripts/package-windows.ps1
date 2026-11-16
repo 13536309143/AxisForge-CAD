@@ -37,6 +37,8 @@ Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile rele
 $signature=Get-AuthenticodeSignature release/AxisForge-CAD/VC_redist.x64.exe
 if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation'){throw 'Invalid Microsoft runtime installer signature'}
 Copy-Item README.md,LICENSE,start.cmd,test.cmd,RELEASE_NOTES.md release/AxisForge-CAD
+$buildCommit = if(Test-Path .git){git rev-parse HEAD}else{'source-archive'}
+[IO.File]::WriteAllText((Join-Path (Get-Location) 'release/AxisForge-CAD/BUILD_INFO.txt'),"AxisForge CAD $version`nBuild commit: $buildCommit`nQt SDK: $((Get-Item $env:QT_ROOT_DIR).Name)`n",[Text.UTF8Encoding]::new($false))
 Copy-Item docs,examples release/AxisForge-CAD -Recurse
 & "$dest/axisforge_tests.exe"
 if($LASTEXITCODE){throw 'Packaged core tests failed'}
@@ -52,4 +54,5 @@ if(Test-Path .git){
 }
 $checksums=foreach($file in @($windowsArchive,$sourceArchive)){(Get-FileHash $file -Algorithm SHA256).Hash.ToLower()+'  '+[IO.Path]::GetFileName($file)}
 [IO.File]::WriteAllText((Join-Path (Get-Location) 'release/SHA256SUMS.txt'),($checksums -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
+
 
