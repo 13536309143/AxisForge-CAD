@@ -112,7 +112,7 @@ test("adaptive grid covers large transformed geometry with bounded density", [] 
     auto grid = adaptiveGrid(bounds, b.position, 20000);
     CHECK(grid.minX <= bounds.min.x() && grid.maxX >= bounds.max.x());
     CHECK(grid.minY <= bounds.min.y() && grid.maxY >= bounds.max.y());
-    CHECK(grid.z < bounds.min.z());
+    CHECK(grid.z == 0);
     CHECK((grid.maxX - grid.minX) / grid.step <= 42 && (grid.maxY - grid.minY) / grid.step <= 42);
     CHECK(grid.step > 10);
 });
@@ -128,4 +128,12 @@ test("grid follows visibility camera range and empty scene", [] {
     auto empty = adaptiveGrid({}, {0, 0, 0}, 180);
     CHECK(std::isfinite(empty.step) && empty.step > 0);
     CHECK(empty == adaptiveGrid({}, {0, 0, 0}, 180));
+});
+
+test("floor plane stays at world zero across model heights and camera zoom", [] {
+    for(float height:{-10000.f,-80.f,0.f,300.f,10000.f}) {
+        Scene scene;auto body=makeBody(Shape::Box);body.position={20,30,height};scene.bodies<<body;
+        for(double distance:{20.,180.,30000.})CHECK(adaptiveGrid(visibleWorldBounds(scene),{0,0,height},distance).z==0);
+        scene.bodies[0].visible=false;CHECK(adaptiveGrid(visibleWorldBounds(scene),{0,0,height},180).z==0);
+    }
 });

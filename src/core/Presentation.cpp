@@ -58,7 +58,8 @@ GridPlan adaptiveGrid(const Bounds &bounds, const QVector3D &target, double dist
     p.maxX = std::ceil(maxX / p.step) * p.step;
     p.minY = std::floor(minY / p.step) * p.step;
     p.maxY = std::ceil(maxY / p.step) * p.step;
-    p.z = (bounds.valid ? qMin(0.0, double(bounds.min.z())) : 0.0) - p.step * .001;
+    // The construction floor is a fixed world plane. Adapt only XY extent and spacing.
+    p.z = 0.0;
     p.axisLength = nice(qMax(maxX - minX, maxY - minY) * .12);
     return p;
 }
