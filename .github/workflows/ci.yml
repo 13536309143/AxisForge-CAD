@@ -58,7 +58,10 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             $tagHead = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/v$version" --jq '.object.sha'
             if ($LASTEXITCODE) { throw 'Cannot inspect existing release tag' }
+            git fetch origin $tagHead --no-tags
+            if ($LASTEXITCODE) { throw 'Cannot fetch release baseline' }
             $applicationChanges = git diff --name-only $tagHead HEAD -- src tests CMakeLists.txt
+            if ($LASTEXITCODE) { throw 'Cannot compare application sources' }
             if ($applicationChanges) { throw 'Existing release application code differs; use a new version' }
             gh release upload "v$version" "release/AxisForge-CAD-$version-Windows-x64.zip" "release/AxisForge-CAD-$version-Source.zip" release/SHA256SUMS.txt --clobber
             if ($LASTEXITCODE) { throw 'Release asset replacement failed' }
@@ -67,4 +70,3 @@ jobs:
             gh release create "v$version" "release/AxisForge-CAD-$version-Windows-x64.zip" "release/AxisForge-CAD-$version-Source.zip" release/SHA256SUMS.txt --target ${{ github.sha }} --title "AxisForge CAD $version" --notes-file RELEASE_NOTES.md
           }
           if ($LASTEXITCODE) { throw 'Release publication failed' }
-
