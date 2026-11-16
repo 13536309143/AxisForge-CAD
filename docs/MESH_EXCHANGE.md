@@ -1,6 +1,6 @@
 # GLB / OBJ 网格交换
 
-适用版本：AxisForge CAD 0.3.0，2026-11-12。
+适用版本：AxisForge CAD 1.0.0，2026-11-12。
 
 ## 操作入口
 
@@ -74,3 +74,6 @@ MTL 只读取 OBJ 同目录下的相对文件，不读取目录外路径或链�
 本机导出的通孔示例 GLB 另经 Khronos glTF Validator `2.0.0-dev.3.10` 独立检查，结果为 0 error、0 warning。校验器仅用于开发验证，不作为程序运行依赖。
 
 格式依据：[glTF 2.0 官方规范](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)。
+
+
+1.0.0 项目格式补充：仅含网格和原有配合通常写 version 3；若含其他新增能力，可写更高版本，当前兼容 version 1～6。程序版本与项目文件 version 独立。

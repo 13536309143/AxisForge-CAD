@@ -27,3 +27,7 @@ FFmpeg库报告构建参数为：`--enable-shared --disable-static --prefix=/d/b
 ## Linux构建
 
 除Qt 6外，需要OCCT建模、OCAF、数据交换、可视化开发包，以及TBB、FreeType、Fontconfig、FreeImage开发包。具体apt命令以.github/workflows/ci.yml为准。Windows与Linux的OCCT工具包名称不同，CMake对STEP库名称作了兼容处理。
+
+
+## 1.0.0 发布构建
+正式 Windows 包在 GitHub Actions 使用 Qt 6.8.3 / MSVC x64 / OCCT 7.9.3 构建，Linux 使用系统 Qt6 / OCCT7.6；本机另验证 Qt5.15.2。新的 Windows 包通过官方 VC_redist.x64.exe 提供编译器运行库安装，不自动执行安装。SDK准备和运行库收集流程分别位于 scripts/setup-occt.ps1 与 scripts/package-windows.ps1。

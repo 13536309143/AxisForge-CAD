@@ -214,7 +214,7 @@
     "coloredPixels": 48475,
     "gpuLocalUsageBytes": 106729472,
     "gpuMemoryAvailable": true,
-    "measuredFps": 144.57831325301206,
+    "measuredFps": 140.07782101167317,
     "renderer": "NVIDIA GeForce RTX 3060/PCIe/SSE2 · OpenGL 3.3.0 NVIDIA 610.88",
     "reportedSwapInterval": 1,
     "requestedVsync": 1,

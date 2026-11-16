@@ -24,7 +24,7 @@ jobs:
           path: build/test-artifacts
   windows-release:
     if: >-
-      github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'release: v0.5.0')
+      github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'release: v')
     needs: linux-qt6
     runs-on: windows-2022
     permissions:
@@ -40,19 +40,16 @@ jobs:
       - name: Download official OCCT SDK
         shell: pwsh
         run: |
-          New-Item -ItemType Directory deps/occt,deps/thirdparty -Force | Out-Null
-          Invoke-WebRequest https://github.com/Open-Cascade-SAS/OCCT/releases/download/V7_9_3/opencascade-7.9.3-vc14-64.zip -OutFile deps/sdk.zip
-          if ((Get-FileHash deps/sdk.zip -Algorithm SHA256).Hash.ToLower() -ne '2a4f5e187992427674869e89477882d1ace4d67695d4b27173830d93f8cf11be') { throw 'SDK integrity mismatch' }
-          Expand-Archive deps/sdk.zip deps/occt
-          Invoke-WebRequest https://github.com/Open-Cascade-SAS/OCCT/releases/download/V7_9_3/3rdparty-vc14-64.zip -OutFile deps/thirdparty.zip
-          Expand-Archive deps/thirdparty.zip deps/thirdparty
+          ./scripts/setup-occt.ps1
       - name: Build test and package Windows
         shell: pwsh
         run: ./scripts/package-windows.ps1
-      - name: Publish v0.5.0 release
+      - name: Publish versioned release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create v0.5.0 release/AxisForge-CAD-0.5.0-Windows-x64.zip --target ${{ github.sha }} --title 'AxisForge CAD 0.5.0' --notes-file RELEASE_NOTES.md
-
-
+        run: |
+          $match = [regex]::Match((Get-Content CMakeLists.txt -Raw), 'project\(AxisForgeCAD VERSION (\d+\.\d+\.\d+)')
+          if (-not $match.Success) { throw 'Missing application version' }
+          $version = $match.Groups[1].Value
+          gh release create "v$version" "release/AxisForge-CAD-$version-Windows-x64.zip" "release/AxisForge-CAD-$version-Source.zip" release/SHA256SUMS.txt --target ${{ github.sha }} --title "AxisForge CAD $version" --notes-file RELEASE_NOTES.md
