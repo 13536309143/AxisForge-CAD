@@ -15,7 +15,7 @@ set "PATH=%~dp0run;%OCCT_ROOT%\win64\vc14\bin;%QT_ROOT%\bin;%PATH%"
 ctest --test-dir build -C Release --output-on-failure
 if errorlevel 1 goto failed
 if exist "run\" (
-  copy /y "build\Release\AxisForgeCAD.exe" "run\AxisForgeCAD-0.6.0.exe" >nul
+  copy /y "build\Release\AxisForgeCAD.exe" "run\AxisForgeCAD-0.7.0.exe" >nul
   if errorlevel 1 goto failed
   copy /y "build\Release\AxisForgeCAD.exe" "run\AxisForgeCAD.exe" >nul 2>&1
 )

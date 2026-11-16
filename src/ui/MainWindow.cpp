@@ -3,6 +3,7 @@
 #include "core/Constraints.h"
 #include "core/Kernel.h"
 #include "core/MeshIO.h"
+#include "core/ParameterFields.h"
 #include "core/ProjectIO.h"
 #include <QAction>
 #include <QActionGroup>
@@ -244,18 +245,12 @@ void MainWindow::buildActions() {
     for (int i = 0; i < 5; ++i) {
         auto shape = Shape(i);
         auto *a = action(create, shapeName(shape), QString("Ctrl+%1").arg(i + 1), "create" + shapeKey(shape),
-                         [this, shape] {
-                             auto id = document_.addBody(shape);
-                             selectBody(id);
-                             log(QStringLiteral("创建：") + shapeName(shape));
-                         });
+                         [this, shape] { createBodyDialog(shape); });
         toolbar->addAction(a);
     }
     for (auto shape : {Shape::Tube, Shape::Frustum, Shape::Ellipsoid, Shape::Wedge}) {
-        auto *a = action(create, shapeName(shape), {}, "create" + shapeKey(shape), [this, shape] {
-            selectBody(document_.addBody(shape));
-            viewport_->fitAll();
-        });
+        auto *a = action(create, shapeName(shape), {}, "create" + shapeKey(shape),
+                         [this, shape] { createBodyDialog(shape); });
         shapeMenu->addAction(a);
     }
     auto *more = new QToolButton;
@@ -500,6 +495,7 @@ void MainWindow::buildPanels() {
         spin->setSuffix(suffix);
         numbers_[key] = spin;
         form->addRow(label, spin);
+        form->labelForField(spin)->setObjectName(key + "Label");
     };
     auto *dimensions = new QGroupBox(QStringLiteral("参数化几何"));
     auto *df = new QFormLayout(dimensions);
@@ -511,7 +507,8 @@ void MainWindow::buildPanels() {
     segments_ = new QSpinBox;
     segments_->setObjectName("segments");
     segments_->setRange(8, 128);
-    df->addRow(QStringLiteral("圆周细分"), segments_);
+    df->addRow(QStringLiteral("曲面细分"), segments_);
+    df->labelForField(segments_)->setObjectName("segmentsLabel");
     vertical->addWidget(dimensions);
     auto *transform = new QGroupBox(QStringLiteral("位置与姿态"));
     auto *tf = new QFormLayout(transform);
@@ -779,6 +776,24 @@ void MainWindow::showProperties() {
         (b->shape == Shape::Solid || b->shape == Shape::Mesh) ? QStringLiteral("由实体定义") : QString());
     if ((b->shape == Shape::Solid || b->shape == Shape::Mesh))
         segments_->setValue(segments_->minimum());
+    const auto fields = parameterFields(b->shape);
+    for (const auto &key : QStringList{"width", "depth", "height", "radius", "tubeRadius"}) {
+        auto *label = propertyForm_->findChild<QLabel *>(key + "Label");
+        bool used = false;
+        for (const auto &field : fields)
+            if (field.key == key) {
+                used = true;
+                if (label)
+                    label->setText(field.label);
+            }
+        numbers_[key]->setVisible(used);
+        numbers_[key]->setEnabled(used);
+        if (label)
+            label->setVisible(used);
+    }
+    segments_->setVisible(hasSubdivision(b->shape));
+    segments_->setEnabled(hasSubdivision(b->shape));
+    propertyForm_->findChild<QLabel *>("segmentsLabel")->setVisible(hasSubdivision(b->shape));
     const auto e = b->rotation.toEulerAngles();
     for (int i = 0; i < 3; ++i) {
         numbers_[QString("pos%1").arg(i)]->setValue(b->position[i]);
@@ -1012,6 +1027,13 @@ int MainWindow::runSelfTest(const QString &directory) {
             throw std::runtime_error(label.toStdString());
         checks << label;
     };
+    auto confirmNextCreation = [this] {
+        QTimer::singleShot(0, this, [this] {
+            if (auto *dialog = findChild<QDialog *>("createBodyDialog"))
+                if (auto *button = dialog->findChild<QPushButton *>("createBodyConfirm"))
+                    button->click();
+        });
+    };
     try {
         check(viewport_->isValid() && viewport_->renderError().isEmpty(), "OpenGL context and shaders");
         const auto demo = document_.scene();
@@ -1037,6 +1059,7 @@ int MainWindow::runSelfTest(const QString &directory) {
             const QString key = "create" + shapeKey(Shape(i));
             auto *a = findChild<QAction *>(key);
             check(a != nullptr, "create action exists " + key);
+            confirmNextCreation();
             a->trigger();
             check(document_.scene().bodies.size() == 6, "create shape " + shapeKey(Shape(i)));
             document_.history()->undo();
@@ -1301,6 +1324,7 @@ int MainWindow::runSelfTest(const QString &directory) {
         check(!exportStep(directory + "/mesh-not-solid.step", document_.scene(), &why),
               "mixed mesh STEP export fails clearly");
         document_.replace(beforeMesh);
+#include "creation_checks.inc"
 #include "ground_checks.inc"
 #include "mate_checks.inc"
 #include "release_checks.inc"

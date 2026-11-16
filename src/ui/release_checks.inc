@@ -2,7 +2,7 @@
     for (auto shape : {Shape::Tube, Shape::Frustum, Shape::Ellipsoid, Shape::Wedge}) {
         auto *createAction = findChild<QAction *>("create" + shapeKey(shape));
         check(createAction, "new shape action");
-        createAction->trigger();
+        confirmNextCreation();createAction->trigger();
         check(document_.scene().find(selection_)->shape == shape, "new shape UI creation");
         document_.history()->undo();
     }

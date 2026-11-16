@@ -40,6 +40,7 @@ class MainWindow final : public QMainWindow {
     void showProperties();
     void applyProperties();
     void addMateDialog();
+    void createBodyDialog(Shape shape);
     void openMateEditor(const QString &id);
     void selectMate(const QString &id);
     QPointer<QDialog> mateEditor_;

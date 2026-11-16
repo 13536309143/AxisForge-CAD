@@ -87,9 +87,15 @@ void Document::replace(const Scene &scene) {
     emit changed();
 }
 QString Document::addBody(Shape shape) {
+    return addBody(shape, Parameters{});
+}
+QString Document::addBody(Shape shape, const Parameters &parameters, const QString &name, QString *error) {
     Body b = makeBody(shape, scene_.bodies.size() + 1);
+    b.params = parameters;
+    if (!name.isEmpty())
+        b.name = name;
     b.position = {float((scene_.bodies.size() % 4) * 38 - 50), float((scene_.bodies.size() / 4) * 38), 20};
-    if (!edit(QStringLiteral("创建 ") + shapeName(shape), [&](Scene &s) { s.bodies << b; }))
+    if (!edit(QStringLiteral("创建 ") + shapeName(shape), [&](Scene &s) { s.bodies << b; }, error))
         return {};
     return b.id;
 }
