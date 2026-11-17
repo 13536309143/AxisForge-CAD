@@ -454,13 +454,3 @@ Qt 新接口和要求请查看对应版本文档，实现以本仓库源码为�
 
 提供 tools/generate_examples.cpp 复现生成过程。模型为教学示意，不是标准件制造图纸，不含强度、公差或接触仿真。
 
-
-## 机械模型示例
-
-从菜单“示例”打开滚珠轴承、直齿轮和双轨直线导向组件；或直接打开 examples/mechanical 下的 .afcad。每例提供 STEP、GLB 和预览，包含尺寸、构成、配合和设计边界说明。详见 [机械示例指南](examples/mechanical/README.md)。
-
-| 轴承 | 齿轮 | 导轨 |
-| --- | --- | --- |
-| ![轴承](examples/mechanical/bearing.png) | ![齿轮](examples/mechanical/gear.png) | ![导轨](examples/mechanical/linear-guide.png) |
-
-提供 tools/generate_examples.cpp 复现生成过程。模型为教学示意，不是标准件制造图纸，不含强度、公差或接触仿真。
