@@ -21,7 +21,7 @@ if not exist "%QT_ROOT%\plugins\platforms" if exist "run\platforms" set "QT_QPA_
 ctest --test-dir build -C Release --output-on-failure
 if errorlevel 1 goto failed
 if exist "run\" (
-  copy /y "build\Release\AxisForgeCAD.exe" "run\AxisForgeCAD-1.0.0.exe" >nul
+  copy /y "build\Release\AxisForgeCAD.exe" "run\AxisForgeCAD-1.0.1.exe" >nul
   if errorlevel 1 goto failed
   copy /y "build\Release\AxisForgeCAD.exe" "run\AxisForgeCAD.exe" >nul 2>&1
 )

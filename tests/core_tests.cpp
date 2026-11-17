@@ -1,3 +1,4 @@
+#include "render/RenderPolicy.h"
 #include "core/Constraints.h"
 #include "core/Geometry.h"
 #include "core/Kernel.h"
@@ -348,6 +349,29 @@ int main(int argc, char **argv) {
 #include "presentation_cases.inc"
 #include "new_shapes.inc"
 #include "ground_cases.inc"
+#include "mechanical_cases.inc"
+    test("clip frustum conservative transformed bounds", [] {
+        Bounds b; b.include({-.5f,-.5f,-.5f}); b.include({.5f,.5f,.5f});
+        QMatrix4x4 m;
+        CHECK(!outsideFrustum(b,m));
+        for(int axis=0;axis<3;++axis) for(float sign:{-1.f,1.f}) {
+            QMatrix4x4 t; QVector3D p; p[axis]=sign*3; t.translate(p);
+            CHECK(outsideFrustum(b,t));
+        }
+        m.translate(1,0,0); CHECK(!outsideFrustum(b,m));
+        QMatrix4x4 perspective; perspective.perspective(45,1,.1f,100);
+        QMatrix4x4 front; front.translate(0,0,-5);
+        CHECK(!outsideFrustum(b,perspective*front));
+        QMatrix4x4 back; back.translate(0,0,5);
+        CHECK(outsideFrustum(b,perspective*back));
+        QMatrix4x4 crossing; crossing.scale(100);
+        CHECK(!outsideFrustum(b,perspective*crossing));
+    });
+    test("LOD hysteresis thresholds", [] {
+        CHECK(screenLod(300,2)==0); CHECK(screenLod(10,0)==2);
+        CHECK(screenLod(180,0)==0); CHECK(screenLod(180,1)==1);
+        CHECK(screenLod(80,2)==2); CHECK(screenLod(80,1)==1);
+    });
     out << "\n" << passed << " passed, " << failed << " failed\n";
     return failed ? 1 : 0;
 }

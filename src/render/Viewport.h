@@ -13,6 +13,7 @@
 #include <vector>
 class QPainter;
 namespace af {
+struct SolidData;
 class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
   public:
@@ -29,6 +30,8 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     GridPlan gridPlan() const {
         return gridPlan_;
     }
+    void setLodEnabled(bool enabled) { lodEnabled_=enabled; update(); }
+    void setFrustumCulling(bool enabled) { cullingEnabled_=enabled; update(); }
     void fitAll();
     void setView(int preset);
     enum class DisplayMode { Normal, Triangles, Bounds, Wireframe };
@@ -55,6 +58,8 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     struct Metrics {
         quint64 triangles = 0, vertices = 0, visibleTriangles = 0, visibleVertices = 0, gpuBufferBytes = 0;
         int instances = 0, visibleInstances = 0;
+        int drawnInstances=0, culledInstances=0, lodInstances[3]={0,0,0};
+        quint64 submittedTriangles=0;
         double fps = 0, frameMs = 0;
         quint64 presentedFrames = 0;
     };
@@ -91,6 +96,8 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
         QOpenGLVertexArrayObject vao;
         int count = 0, edgeCount = 0, triangleEdgeCount = 0, boundsCount = 0, allocatedVertices = 0;
         Bounds bounds;
+        std::shared_ptr<const SolidData> source;
+        int lodOffset[3]={0,0,0}, lodCount[3]={0,0,0}, level=0;
         GpuMesh() : buffer(QOpenGLBuffer::VertexBuffer) {}
     };
     void cleanup();
@@ -118,6 +125,8 @@ class Viewport final : public QOpenGLWidget, protected QOpenGLFunctions {
     QVector3D dragOrigin_, dragAnchor_, dragNormal_;
     bool moving_ = false;
     bool continuous_ = false;
+    bool lodEnabled_=true, cullingEnabled_=true;
+    Metrics frameMetrics_;
     QElapsedTimer fpsClock_;
     quint64 frames_ = 0, totalFrames_ = 0;
     double fps_ = 0;

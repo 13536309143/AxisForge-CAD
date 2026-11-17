@@ -4,9 +4,9 @@
 
 **用参数构建实体，用配合组织装配。**
 
-1.0.0 · C++17 · Qt Widgets · OpenGL 3.3 Core · Open CASCADE Technology
+1.0.1 · C++17 · Qt Widgets · OpenGL 3.3 Core · Open CASCADE Technology
 
-[下载正式版](https://github.com/13536309143/AxisForge-CAD/releases/tag/v1.0.0) · [构建与测试](https://github.com/13536309143/AxisForge-CAD/actions) · [模型参数](docs/MODELING_PARAMETERS.md) · [配合与地板](docs/MATES_AND_GRID.md) · [网格交换](docs/MESH_EXCHANGE.md)
+[下载正式版](https://github.com/13536309143/AxisForge-CAD/releases/tag/v1.0.1) · [构建与测试](https://github.com/13536309143/AxisForge-CAD/actions) · [模型参数](docs/MODELING_PARAMETERS.md) · [配合与地板](docs/MATES_AND_GRID.md) · [网格交换](docs/MESH_EXCHANGE.md)
 
 </div>
 
@@ -14,7 +14,7 @@
 
 AxisForge CAD 是可运行、可构建、可测试的轻量三维 CAD 桌面项目。用户可以在创建前设置模型尺寸与细分，编辑外观和位姿，执行实体布尔运算，建立装配配合，并交换 STEP、GLB、OBJ 等文件。
 
-项目把 **Qt 界面、文档事务、几何内核、装配求解和 OpenGL 显示**分层实现，适合学习桌面三维软件的完整开发流程，也可作为几何工具与装配查看器的基础。1.0.0 整合当前实现及构建、部署和验证流程；草图约束、完整特征历史和通用工业装配求解仍属于后续方向。
+项目把 **Qt 界面、文档事务、几何内核、装配求解和 OpenGL 显示**分层实现，适合学习桌面三维软件的完整开发流程，也可作为几何工具与装配查看器的基础。1.0.1 整合当前实现及构建、部署和验证流程；草图约束、完整特征历史和通用工业装配求解仍属于后续方向。
 
 ## 目录
 
@@ -38,17 +38,17 @@ AxisForge CAD 是可运行、可构建、可测试的轻量三维 CAD 桌面项�
 
 ## 快速运行
 
-1. 从 [v1.0.0 Release](https://github.com/13536309143/AxisForge-CAD/releases/tag/v1.0.0) 下载 `AxisForge-CAD-1.0.0-Windows-x64.zip`。
+1. 从 [v1.0.1 Release](https://github.com/13536309143/AxisForge-CAD/releases/tag/v1.0.1) 下载 `AxisForge-CAD-1.0.1-Windows-x64.zip`。
 2. 解压整个目录。若系统尚未安装适用的 Microsoft Visual C++ x64 运行库，运行包内的 `VC_redist.x64.exe`。
 3. 双击 `start.cmd`。启动默认展示示例装配，也可打开 `examples` 中的项目。
 4. 点击建模按钮，填写该类型的参数，确认后创建；取消不会改变场景。
 
 运行包包含 Qt、OCCT 所需的动态库、平台插件和资源，不要求安装开发环境。**不要只复制 EXE**，需保留整个 `run` 目录。显卡驱动须提供 OpenGL 3.3 Core 或更高版本；运行库不能替代显卡驱动。
 
-发布页还提供 `AxisForge-CAD-1.0.0-Source.zip` 与 `SHA256SUMS.txt`。源码包用于开发，不能直接当作运行包。可核对下载内容：
+发布页还提供 `AxisForge-CAD-1.0.1-Source.zip` 与 `SHA256SUMS.txt`。源码包用于开发，不能直接当作运行包。可核对下载内容：
 
 ```powershell
-Get-FileHash .\AxisForge-CAD-1.0.0-Windows-x64.zip -Algorithm SHA256
+Get-FileHash .\AxisForge-CAD-1.0.1-Windows-x64.zip -Algorithm SHA256
 ```
 
 ### 常用操作
@@ -69,7 +69,7 @@ Get-FileHash .\AxisForge-CAD-1.0.0-Windows-x64.zip -Algorithm SHA256
 
 ## 功能与技术栈
 
-| 模块 | 1.0.0 能力 |
+| 模块 | 1.0.1 能力 |
 | --- | --- |
 | 参数建模 | 九种 OCCT 实体，创建前独立参数窗口，按类型显示属性 |
 | 对象编辑 | 名称、尺寸、细分、颜色、位置、旋转、可见性和固定状态 |
@@ -134,7 +134,7 @@ OpenGL 不理解“圆柱”“孔”或“同轴”。OCCT 计算实体，项�
 ```powershell
 git clone https://github.com/13536309143/AxisForge-CAD.git
 Set-Location AxisForge-CAD
-git checkout v1.0.0
+git checkout v1.0.1
 $env:QT_ROOT_DIR = 'C:\Qt\6.8.3\msvc2022_64'
 .\scripts\setup-occt.ps1
 ```
@@ -162,8 +162,8 @@ deps/
 ```text
 release/
 ├─ AxisForge-CAD/                       可运行目录
-├─ AxisForge-CAD-1.0.0-Windows-x64.zip   Windows 包
-├─ AxisForge-CAD-1.0.0-Source.zip        当前 Git 提交的源码归档
+├─ AxisForge-CAD-1.0.1-Windows-x64.zip   Windows 包
+├─ AxisForge-CAD-1.0.1-Source.zip        当前 Git 提交的源码归档
 └─ SHA256SUMS.txt                       两个归档的校验值
 ```
 
@@ -205,7 +205,7 @@ sudo apt-get install -y build-essential git cmake ninja-build \
 
 git clone https://github.com/13536309143/AxisForge-CAD.git
 cd AxisForge-CAD
-git checkout v1.0.0
+git checkout v1.0.1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel 2
 ./build/AxisForgeCAD
@@ -338,7 +338,7 @@ B-Rep 用曲面及顶点／边／面／壳／体的拓扑描述实体，显示�
 | OBJ / MTL | 是 | 是 | 网格、名称、法线、对象材质色，须保留 MTL |
 | ASCII STL | 否 | 是 | 可见对象世界空间三角网格，无颜色和配合 |
 
-应用 **1.0.0** 与文件 `version` 独立：读取 version 1～6；通常实体为 2、网格为 3、扩展配合为 4、新图元为 5、地面对齐为 6。项目不保存撤销栈、相机和完整会话。
+应用 **1.0.1** 与文件 `version` 独立：读取 version 1～6；通常实体为 2、网格为 3、扩展配合为 4、新图元为 5、地面对齐为 6。项目不保存撤销栈、相机和完整会话。
 
 STEP 单位归一为 mm，嵌套装配展开为独立对象，不保留可编辑层级、面级多色、PMI、外部引用和本项目配合。开放曲面或游离线不符合当前实体要求。可见网格使 STEP 导出明确失败，隐藏后可导出其余实体。
 
@@ -358,7 +358,7 @@ FPS 计数 `frameSwapped` 事件，帧时间为 `1000/FPS`，不是 GPU 计时�
 
 ## 测试与正式发布
 
-当前基线为 **111 项核心检查，两种同步模式各 210 项桌面检查**；1.0.0 重新构建与验证，记录见 [测试报告](docs/TESTING.md) 和 [Actions](https://github.com/13536309143/AxisForge-CAD/actions)。
+当前基线为 **111 项核心检查，两种同步模式各 210 项桌面检查**；1.0.1 重新构建与验证，记录见 [测试报告](docs/TESTING.md) 和 [Actions](https://github.com/13536309143/AxisForge-CAD/actions)。
 
 ```powershell
 # 推荐：使用完整部署目录，保证 DLL、插件和资源与被测程序在一起
@@ -437,3 +437,30 @@ scripts/                        SDK 准备与发布打包
 - [glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)：GLB 规范。
 
 Qt 新接口和要求请查看对应版本文档，实现以本仓库源码为准；历史专题文档保留其编写时的版本说明。
+
+
+## 1.0.1 渲染优化
+
+新增自动三档实体 LOD、对象级视锥剔除及 GPU 网格复用；场景统计可独立开关并查看每帧提交数量。使用范围、算法与验证见 [渲染优化说明](docs/RENDER_OPTIMIZATION.md)。此更新随 1.0.1 发布。
+
+
+## 机械模型示例
+
+从菜单“示例”打开滚珠轴承、直齿轮和双轨直线导向组件；或直接打开 examples/mechanical 下的 .afcad。每例提供 STEP、GLB 和预览，包含尺寸、构成、配合和设计边界说明。详见 [机械示例指南](examples/mechanical/README.md)。
+
+| 轴承 | 齿轮 | 导轨 |
+| --- | --- | --- |
+| ![轴承](examples/mechanical/bearing.png) | ![齿轮](examples/mechanical/gear.png) | ![导轨](examples/mechanical/linear-guide.png) |
+
+提供 tools/generate_examples.cpp 复现生成过程。模型为教学示意，不是标准件制造图纸，不含强度、公差或接触仿真。
+
+
+## 机械模型示例
+
+从菜单“示例”打开滚珠轴承、直齿轮和双轨直线导向组件；或直接打开 examples/mechanical 下的 .afcad。每例提供 STEP、GLB 和预览，包含尺寸、构成、配合和设计边界说明。详见 [机械示例指南](examples/mechanical/README.md)。
+
+| 轴承 | 齿轮 | 导轨 |
+| --- | --- | --- |
+| ![轴承](examples/mechanical/bearing.png) | ![齿轮](examples/mechanical/gear.png) | ![导轨](examples/mechanical/linear-guide.png) |
+
+提供 tools/generate_examples.cpp 复现生成过程。模型为教学示意，不是标准件制造图纸，不含强度、公差或接触仿真。

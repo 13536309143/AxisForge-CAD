@@ -1,0 +1,132 @@
+{
+    "bodies": [
+        {
+            "brep": "AAAWFHicxVhLb9w4DL77V/i4rdeF3pKPxaQ9bbsLTNA9G2maBggyRR4F+u+XojS2ZFEa97RI4FgiTX586KOQ7vD+eHh/9aG/Pv04PZzufvVf+J/9Hzdv+k/zy9M8Xs0v88/75/vTY/fX6WZ+gZfnnnWH16eft+Lrc69cx3sGP/6ZvzpcjPy87QX4OmpNqLOaeva6KHNX91lqrx4TDW9iWaxoRS9Yb96FL0YvlsEjDzZEz80FBTCg3CULLY1N3GnCssCTVGbRsIvRyAvByAuxyEuhyDMw8044yZ2WzHI7aWeEV1u7YXn/3xSxm597oWB3nGBfWIhnVGs+1121tpXfbGiOG9VlN5QHdi+6WjQXV9TXix+IzvpN3p/trX0EBQH5BbH/vP11VZqnIwVZREhkaEU+XoBelUfsre/rYhAYG+zbFaiVxZZXK7WynX9OD7/uTo/yCngyvv/9eP10Pz/evT4sDHp8ffo230DXcUb3xxncSLUQS/BnTbJ2xDbIomGbFsg8bWpH4UwKaQkLaSFr8nMhG9/XxUWeu+vj9/kH5Nny7sttx29HZrskUx3zSowzDr/dW0pnLJQ+fO161Ar+IS8RhgN8CyZcAIHGRbTAGOtG6zUG6wUblzQqwmEwq7V3IqPHsFKwjqvUp3Hok1d87opSroHpNEoTW84RHo1Bj4Q1lYC2WQgOzFMhmCRt/96fwXrJ5FvQWHSo8alQ6+MMYS2OE2ODkXkmfq/eAR8MXQ93itWIS84ScYafLHu9GQm/JukzvvSWX4lFlrrUEyaD12pgM+ByE8i5lbaBBKuxl/JC4MVDY+V1KMdUFEJkhdCmyMfudLgMrk7g+vW5LQv4CoG5WlKmpBW5XY+TX7qY5k1rBpN6IjJiMSNyzYgWmzMYZ88unglst7nZTAhtikgpIVzjLC1kK9ZBh+oRB0xNOeY4G3dB5nVUvAVZxPI2IStMLz63kE2Z5r2QRR2VbEFWsXfakBVCVgRkWWR5L+IGKN1CbKotlUHGEa+IA69YcbxlfryR9BQygkJqVj67g9x01G8NIr4ebB+E7fO1qxCwtO2JxPVKqGJahpofsYymVzz2kug+6dVHiQGHw49zKc+UyjIlVRXXwjkeCl+no18KmpFirBRHY/8hwAH5epAVRtpXiwqxeGwyQiWFag8lSaQkSVCSoClpH+YKs3hYuoXZ7OEkgZwkiK4QNCftw1yhFg/LtjC7PaQksCkEQUqCJKVdkEV9WsHxr0MGUtnDSgJZSRAtLkpW0vlZQ1YSyEoCD6lAVuLEBMfbzKgDa+nkvKTmTWae29pRFvGfI7yTECeQuzh8xnOAexnE9jAeeICNN19ecovNAVW5BeNeAMleKQDkKECiPWoHnJoDtvjIywy5HFD1Sor9tgCCe6ABQBMJqD1IB0wTmhvLS+iUwaneBdHHggYo2wEabM4STntIDpgk7MzRFHA4y6cmKhy/p7Qt+vAfP9+A2LgSQ0MuG3hIe9hBH6Fa8ICzeTyhIRYaC20fYIuft0K1oCrw9z/ib8XG",
+            "color": "#4f728c",
+            "fixed": true,
+            "id": "9bc16ae6-4eee-42eb-9673-2b64e406f833",
+            "name": "安装底板 · 180×55×8",
+            "parameters": {
+                "depth": 30,
+                "height": 30,
+                "radius": 15,
+                "segments": 64,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                0,
+                0,
+                4
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "solid",
+            "visible": true
+        },
+        {
+            "color": "#afc6d6",
+            "fixed": true,
+            "id": "6c42d393-2101-4850-a9ef-5b5195e76b85",
+            "name": "矩形导轨 · 180×12×10",
+            "parameters": {
+                "depth": 12,
+                "height": 10,
+                "radius": 15,
+                "segments": 64,
+                "tubeRadius": 5,
+                "width": 180
+            },
+            "position": [
+                0,
+                -16,
+                13
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "box",
+            "visible": true
+        },
+        {
+            "color": "#afc6d6",
+            "fixed": true,
+            "id": "27e1b542-4d21-4eb7-ad6d-891f261bcfaa",
+            "name": "矩形导轨 · 180×12×10",
+            "parameters": {
+                "depth": 12,
+                "height": 10,
+                "radius": 15,
+                "segments": 64,
+                "tubeRadius": 5,
+                "width": 180
+            },
+            "position": [
+                0,
+                16,
+                13
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "box",
+            "visible": true
+        },
+        {
+            "brep": "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",
+            "color": "#da8f64",
+            "fixed": false,
+            "id": "e4a147f1-85fe-44bc-aa63-074490971acb",
+            "name": "开槽滑块 · 45×50×18",
+            "parameters": {
+                "depth": 30,
+                "height": 30,
+                "radius": 15,
+                "segments": 64,
+                "tubeRadius": 5,
+                "width": 30
+            },
+            "position": [
+                15,
+                0,
+                25
+            ],
+            "rotation": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "shape": "solid",
+            "visible": true
+        }
+    ],
+    "format": "axisforge.project",
+    "mates": [
+        {
+            "angle": 90,
+            "distance": 30,
+            "enabled": true,
+            "id": "mate-0",
+            "offset": 0,
+            "source": "6c42d393-2101-4850-a9ef-5b5195e76b85",
+            "sourceAxis": 2,
+            "target": "e4a147f1-85fe-44bc-aa63-074490971acb",
+            "targetAxis": 2,
+            "type": "parallel"
+        }
+    ],
+    "title": "双轨直线导向组件 · 180 mm",
+    "units": "mm",
+    "version": 2
+}

@@ -54,6 +54,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), document_(this) {
     viewport_ = new Viewport(this);
     setCentralWidget(viewport_);
     buildActions();
+    auto *examplesMenu=menuBar()->addMenu(QStringLiteral("示例"));
+    const QStringList files={"bearing", "gear", "linear-guide"};
+    const QStringList names={QStringLiteral("滚珠轴承"),QStringLiteral("直齿轮"),QStringLiteral("直线导轨")};
+    for(int i=0;i<files.size();++i) {
+        auto *action=examplesMenu->addAction(names[i]);
+        connect(action,&QAction::triggered,this,[this,file=files[i]] {
+            const QString app=QCoreApplication::applicationDirPath();
+            for(const auto &root:QStringList{app+"/../examples/mechanical",app+"/../../examples/mechanical",QDir::currentPath()+"/examples/mechanical"}) {
+                const QString path=root+"/"+file+".afcad";
+                if(QFileInfo::exists(path)){openFile(path);return;}
+            }
+            QMessageBox::warning(this,QStringLiteral("示例不存在"),QStringLiteral("请保留发布包的 examples/mechanical 目录。"));
+        });
+    }
     buildPanels();
     buildSceneStats();
     setStyleSheet(QStringLiteral(R"(
@@ -565,6 +579,14 @@ void MainWindow::buildSceneStats() {
     continuous->setObjectName("continuousRendering");
     connect(continuous, &QCheckBox::toggled, viewport_, &Viewport::setContinuousRendering);
     controls->addWidget(continuous);
+    auto *lod=new QCheckBox(QStringLiteral("自动 LOD"));
+    lod->setObjectName("lodEnabled"); lod->setChecked(true);
+    connect(lod,&QCheckBox::toggled,viewport_,&Viewport::setLodEnabled);
+    controls->addWidget(lod);
+    auto *culling=new QCheckBox(QStringLiteral("视锥剔除"));
+    culling->setObjectName("frustumCulling"); culling->setChecked(true);
+    connect(culling,&QCheckBox::toggled,viewport_,&Viewport::setFrustumCulling);
+    controls->addWidget(culling);
     auto *vsync = new QComboBox;
     vsync->setObjectName("vsyncMode");
     vsync->addItem(QStringLiteral("垂直同步：开启"), 1);
@@ -624,6 +646,9 @@ void MainWindow::updateSceneStats() {
     auto mib = [](quint64 bytes) { return QString::number(double(bytes) / (1024 * 1024), 'f', 2) + " MiB"; };
     const int requested = qApp->property("requestedVsync").toInt();
     sceneStats_->setText(
+        QStringLiteral("本帧：绘制 %1 / 剔除 %2 · 实际提交三角形 %3 · LOD 高/中/低 %4/%5/%6<br>")
+            .arg(m.drawnInstances).arg(m.culledInstances).arg(m.submittedTriangles)
+            .arg(m.lodInstances[0]).arg(m.lodInstances[1]).arg(m.lodInstances[2]) +
         QStringLiteral(
             "<table cellspacing='7'><tr><td>实例 总/可见</td><td><b>%1 / %2</b></td><td>三角面 "
             "总/可见</td><td><b>%3 / %4</b></td><td>顶点 总/可见（含重复）</td><td><b>%5 / %6</b></td></tr>"
@@ -1328,6 +1353,7 @@ int MainWindow::runSelfTest(const QString &directory) {
 #include "ground_checks.inc"
 #include "mate_checks.inc"
 #include "release_checks.inc"
+#include "mechanical_checks.inc"
         document_.replace(beforeMesh);
         selectBody(solidId);
         viewport_->fitAll();

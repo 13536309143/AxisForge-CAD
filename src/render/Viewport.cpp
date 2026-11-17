@@ -1,5 +1,7 @@
 #include "Viewport.h"
 #include "core/Kernel.h"
+#include "RenderPolicy.h"
+#include <BRepBuilderAPI_Copy.hxx>
 #include <QKeyEvent>
 #include <QOpenGLContext>
 #include <QPainter>
@@ -54,7 +56,7 @@ void Viewport::sampleFrames() {
     }
 }
 Viewport::Metrics Viewport::metrics() const {
-    Metrics m;
+    Metrics m=frameMetrics_;
     m.instances = scene_.bodies.size();
     m.presentedFrames = totalFrames_;
     for (const auto &b : scene_.bodies)
@@ -180,10 +182,15 @@ std::unique_ptr<Viewport::GpuMesh> Viewport::upload(const QVector<Vertex> &verti
     return gpu;
 }
 void Viewport::rebuild() {
+    auto previous=std::move(meshes_);
     meshes_.clear();
-    grid_.reset();
     for (const auto &body : scene_.bodies) {
         const auto topology = solidData(body);
+        bool reused=false;
+        for(auto &old:previous) if(old && old->id==body.id && old->source==topology) {
+            meshes_.push_back(std::move(old)); reused=true; break;
+        }
+        if(reused) continue;
         auto v = topology->mesh.vertices;
         int count = v.size();
         v += topology->edgeVertices;
@@ -200,8 +207,26 @@ void Viewport::rebuild() {
             for (int axis = 0; axis < 3; ++axis)
                 if (!(i & (1 << axis)))
                     v << Vertex{corners[i], {0, 0, 1}} << Vertex{corners[i | (1 << axis)], {0, 0, 1}};
+        int offsets[3]={0,0,0}, counts[3]={count,count,count};
+        if(body.shape!=Shape::Mesh) {
+            for(int level=1;level<3;++level) {
+                try {
+                    // Deep copy without triangulation: never remesh the source used by picking/export.
+                    BRepBuilderAPI_Copy copy(topology->shape, Standard_True, Standard_False);
+                    auto coarse=createSolid(copy.Shape(), qMax(8,body.params.segments/(level==1?2:4)));
+                    if(coarse->mesh.vertices.size()<counts[level-1]) {
+                        offsets[level]=v.size(); counts[level]=coarse->mesh.vertices.size();
+                        v+=coarse->mesh.vertices;
+                    } else { offsets[level]=offsets[level-1]; counts[level]=counts[level-1]; }
+                } catch(const std::exception &) {
+                    offsets[level]=offsets[level-1]; counts[level]=counts[level-1];
+                }
+            }
+        }
         auto gpu = upload(v, count, topology->edgeVertices.size(), body.id);
         if (gpu) {
+            gpu->source=topology;
+            for(int level=0;level<3;++level) {gpu->lodOffset[level]=offsets[level];gpu->lodCount[level]=counts[level];}
             gpu->triangleEdgeCount = count * 2;
             gpu->boundsCount = 24;
             gpu->bounds = bounds;
@@ -358,6 +383,7 @@ QString Viewport::pickAt(const QPoint &point) const {
     return pick(scene_, start, end - start).id;
 }
 void Viewport::paintGL() {
+    frameMetrics_=Metrics{};
     glViewport(0, 0, qRound(width() * devicePixelRatioF()), qRound(height() * devicePixelRatioF()));
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
@@ -396,8 +422,22 @@ void Viewport::paintGL() {
             if (!b || !b->visible)
                 continue;
             const auto model = b->matrix();
+            if(cullingEnabled_ && outsideFrustum(gpu->bounds,vp*model)) {
+                ++frameMetrics_.culledInstances; continue;
+            }
+            ++frameMetrics_.drawnInstances;
             const bool related = guide.valid && (b->id == guide.source || b->id == guide.target);
             const bool highlighted = b->id == selected_ || related;
+            int level=0;
+            if(lodEnabled_ && displayMode_==DisplayMode::Normal && !highlighted) {
+                const auto center=(view()*model).map(gpu->bounds.center());
+                const float radius=gpu->bounds.radius();
+                const float diameter=orthographic_ ? height()*radius/(distance_*.4f)
+                    : (center.z()<-radius ? height()*radius*projection()(1,1)/(-center.z()-radius) : 1e9f);
+                level=screenLod(diameter,gpu->level);
+            }
+            gpu->level=level;
+            ++frameMetrics_.lodInstances[level];
             const auto highlight = related ? (!guide.enabled          ? QVector3D(.65f, .68f, .72f)
                                               : b->id == guide.source ? QVector3D(.33f, .85f, .94f)
                                                                       : QVector3D(1.f, .72f, .4f))
@@ -429,7 +469,8 @@ void Viewport::paintGL() {
             } else {
                 glEnable(GL_POLYGON_OFFSET_FILL);
                 glPolygonOffset(1, 1);
-                glDrawArrays(GL_TRIANGLES, 0, gpu->count);
+                glDrawArrays(GL_TRIANGLES, gpu->lodOffset[level], gpu->lodCount[level]);
+                frameMetrics_.submittedTriangles+=gpu->lodCount[level]/3;
                 glDisable(GL_POLYGON_OFFSET_FILL);
                 if (displayMode_ == DisplayMode::Triangles) {
                     program_->setUniformValue("unlit", 1);
