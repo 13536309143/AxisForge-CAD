@@ -109,14 +109,14 @@ test("bad BRep payload leaves body unchanged", [] {
     CHECK(!b.solid);
     CHECK(!decodeBrep(QByteArray::fromHex("ffffffff").toBase64(), b));
 });
-test("legacy project version 1 remains readable", [] {
+test("old project versions are rejected without modifying the scene", [] {
     Scene s;
     s.bodies << makeBody(Shape::Box);
     auto root = QJsonDocument::fromJson(serialize(s)).object();
-    root["version"] = 1;
-    Scene loaded;
-    CHECK(deserialize(QJsonDocument(root).toJson(), loaded));
-    CHECK(std::abs(volume(loaded.bodies[0]) - 27000) < 1e-6);
+    for(int version:{1,2,3,4,5,6,7,99}) {
+        root["version"]=version;Scene loaded=demoScene();const auto before=serialize(loaded);
+        CHECK(!deserialize(QJsonDocument(root).toJson(),loaded));CHECK(serialize(loaded)==before);
+    }
 });
 test("STEP exchange preserves multiple solids names colors and placement", [] {
     QTemporaryDir directory;

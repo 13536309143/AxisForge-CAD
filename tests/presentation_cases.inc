@@ -45,7 +45,7 @@ test("extended constraint conflict rolls back complete scene", [] {
     CHECK(!solve(scene));
     CHECK(serialize(scene) == before);
 });
-test("version 4 preserves angle offset and enabled state", [] {
+test("current format preserves angle offset and enabled state", [] {
     auto scene = pairScene();
     auto m = mate(scene.bodies[0], scene.bodies[1], MateType::Angle);
     m.angle = 42.5;
@@ -53,7 +53,7 @@ test("version 4 preserves angle offset and enabled state", [] {
     m.enabled = false;
     scene.mates << m;
     auto root = QJsonDocument::fromJson(serialize(scene)).object();
-    CHECK(root["version"].toInt() == 4);
+    CHECK(root["version"].toInt() == 8);
     Scene loaded;
     CHECK(deserialize(serialize(scene), loaded));
     CHECK(loaded.mates[0].angle == 42.5 && loaded.mates[0].offset == -15 && !loaded.mates[0].enabled);

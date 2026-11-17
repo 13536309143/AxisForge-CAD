@@ -20,7 +20,7 @@ test("ground mate persists through size orientation and serialization", [] {
     Scene loaded;
     CHECK(deserialize(serialize(s), loaded));
     CHECK(loaded.mates[0].type == MateType::Ground);
-    CHECK(QJsonDocument::fromJson(serialize(s)).object()["version"].toInt() == 6);
+    CHECK(QJsonDocument::fromJson(serialize(s)).object()["version"].toInt() == 8);
     CHECK(mateGuide(s, m).valid);
     CHECK(!mateGuide(s, m).lines.isEmpty());
 });

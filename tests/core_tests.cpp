@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
         auto o = QJsonDocument::fromJson(serialize(s)).object();
         o["version"] = 99;
         CHECK(!deserialize(QJsonDocument(o).toJson(), s));
-        o["version"] = 1;
+        o["version"] = ProjectFormatVersion;
         o["units"] = "inch";
         CHECK(!deserialize(QJsonDocument(o).toJson(), s));
     });
@@ -350,6 +350,8 @@ int main(int argc, char **argv) {
 #include "new_shapes.inc"
 #include "ground_cases.inc"
 #include "mechanical_cases.inc"
+#include "hierarchy_cases.inc"
+#include "format102_cases.inc"
     test("clip frustum conservative transformed bounds", [] {
         Bounds b; b.include({-.5f,-.5f,-.5f}); b.include({.5f,.5f,.5f});
         QMatrix4x4 m;

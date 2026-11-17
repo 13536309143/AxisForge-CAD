@@ -6,6 +6,8 @@
 #include <QVBoxLayout>
 namespace af {
 void MainWindow::createBodyDialog(Shape shape) {
+    const auto *selectedParent=document_.scene().find(selection_);
+    const QString parent=selectedParent && selectedParent->shape==Shape::Group?selection_:QString();
     const auto fields = parameterFields(shape);
     if (fields.isEmpty())
         return;
@@ -75,7 +77,7 @@ void MainWindow::createBodyDialog(Shape shape) {
         if (segments)
             parameters.segments = segments->value();
         QString why;
-        const auto id = document_.addBody(shape, parameters, name->text().trimmed(), &why);
+        const auto id = document_.addBody(shape, parameters, name->text().trimmed(), &why, parent);
         if (id.isEmpty()) {
             feedback->setText(why);
             return;

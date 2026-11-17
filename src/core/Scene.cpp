@@ -5,6 +5,8 @@
 #include <QUuid>
 #include <Standard_Failure.hxx>
 #include <cmath>
+#include <functional>
+#include <limits>
 
 namespace af {
 namespace {
@@ -12,14 +14,14 @@ constexpr double pi = 3.14159265358979323846;
 }
 QString shapeKey(Shape s) {
     return QStringList{"box",  "sphere", "cylinder", "cone",      "torus", "solid",
-                       "mesh", "tube",   "frustum",  "ellipsoid", "wedge"}
+                       "mesh", "tube",   "frustum",  "ellipsoid", "wedge", "group"}
         .value(int(s));
 }
 QString shapeName(Shape s) {
     return QStringList{QStringLiteral("长方体"),   QStringLiteral("球体"),  QStringLiteral("圆柱"),
                        QStringLiteral("圆锥"),     QStringLiteral("圆环"),  QStringLiteral("OCCT 实体"),
                        QStringLiteral("网格模型"), QStringLiteral("圆管"),  QStringLiteral("圆台"),
-                       QStringLiteral("椭球"),     QStringLiteral("楔形体")}
+                       QStringLiteral("椭球"),     QStringLiteral("楔形体"), QStringLiteral("空节点")}
         .value(int(s));
 }
 QString mateKey(MateType t) {
@@ -69,6 +71,14 @@ bool Scene::validate(QString *error) const {
     };
     if (title.size() > 200 || bodies.size() > 300 || mates.size() > 1000)
         return fail(QStringLiteral("项目超过大小限制。"));
+    for(const auto &b:bodies) {
+        if(!b.parentId.isEmpty() && !find(b.parentId)) return fail(QStringLiteral("父节点不存在。"));
+        QSet<QString> visited;const Body *p=&b;
+        while(p) {
+            if(visited.contains(p->id)) return fail(QStringLiteral("模型层级不能包含循环。"));
+            visited.insert(p->id);p=p->parentId.isEmpty()?nullptr:find(p->parentId);
+        }
+    }
     QSet<QString> ids, mateIds;
     qint64 meshVertices = 0;
     auto finite = [](double v) { return std::isfinite(v); };
@@ -76,7 +86,7 @@ bool Scene::validate(QString *error) const {
         if (b.id.isEmpty() || b.id == "@ground" || b.id.size() > 80 || ids.contains(b.id))
             return fail(QStringLiteral("模型 ID 缺失或重复。"));
         ids.insert(b.id);
-        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 10 ||
+        if (b.name.trimmed().isEmpty() || b.name.size() > 160 || int(b.shape) < 0 || int(b.shape) > 11 ||
             !b.color.isValid())
             return fail(QStringLiteral("模型名称、类型或颜色无效。"));
         for (double value :
@@ -124,6 +134,8 @@ bool Scene::validate(QString *error) const {
             return fail(QStringLiteral("约束类型或轴无效。"));
         if (!finite(m.distance) || m.distance < 0 || m.distance > 1000000)
             return fail(QStringLiteral("约束距离无效。"));
+        if(m.type==MateType::Ground && !std::isfinite(minimumZ(m.target)))
+            return fail(QStringLiteral("空子树没有几何，不能与地面对齐。"));
         if (m.type == MateType::Ground && m.offset < 0)
             return fail(QStringLiteral("离地距离不能为负。"));
         if (!finite(m.angle) || m.angle < 0 || m.angle > 180 || !finite(m.offset) ||
@@ -197,4 +209,56 @@ double volume(const Body &b) {
 double surfaceArea(const Body &b) {
     return solidData(b)->area;
 }
+
+bool Scene::descendantOf(const QString &id,const QString &ancestor) const {
+    const Body *b=find(id);
+    for(int i=0;b && i<=bodies.size();++i) {
+        if(b->parentId.isEmpty()) return false;
+        if(b->parentId==ancestor) return true;
+        b=find(b->parentId);
+    }
+    return false;
+}
+bool Scene::isVisible(const QString &id) const {
+    const Body *b=find(id);
+    for(int i=0;b && i<=bodies.size();++i) {
+        if(!b->visible) return false;
+        if(b->parentId.isEmpty()) return true;
+        b=find(b->parentId);
+    }
+    return false;
+}
+void Scene::moveDescendants(const QString &id,const QVector3D &oldPosition,const QQuaternion &oldRotation) {
+    const auto *root=find(id);if(!root)return;
+    const QVector3D position=root->position;const auto delta=(root->rotation*oldRotation.conjugated()).normalized();
+    for(auto &b:bodies) if(descendantOf(b.id,id)) {
+        b.position=position+delta.rotatedVector(b.position-oldPosition);
+        b.rotation=(delta*b.rotation).normalized();
+    }
+}
+void Scene::inheritEdits(const Scene &before) {
+    QSet<QString> done,active;
+    std::function<void(const QString&)> visit=[&](const QString&id) {
+        if(done.contains(id)||active.contains(id))return;
+        active.insert(id);auto *b=find(id);if(!b)return;
+        if(!b->parentId.isEmpty()) {
+            visit(b->parentId);
+            const auto *old=before.find(id),*oldParent=before.find(b->parentId),*parent=find(b->parentId);
+            if(old && old->parentId==b->parentId && oldParent && parent) {
+                auto delta=(parent->rotation*oldParent->rotation.conjugated()).normalized();
+                b->position=parent->position+delta.rotatedVector(b->position-oldParent->position);
+                b->rotation=(delta*b->rotation).normalized();
+            }
+        }
+        active.remove(id);done.insert(id);
+    };
+    for(const auto &b:bodies)visit(b.id);
+}
+double Scene::minimumZ(const QString &id) const {
+    double z=std::numeric_limits<double>::infinity();
+    for(const auto &b:bodies)if((b.id==id||descendantOf(b.id,id)) && b.shape!=Shape::Group)
+        z=qMin(z,minimumWorldZ(b));
+    return z;
+}
+
 } // namespace af

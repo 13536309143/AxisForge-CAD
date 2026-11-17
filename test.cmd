@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 set "AXISFORGE_APP=run\AxisForgeCAD.exe"
-if exist "run\AxisForgeCAD-1.0.1.exe" set "AXISFORGE_APP=run\AxisForgeCAD-1.0.1.exe"
+if exist "run\AxisForgeCAD-1.0.2.exe" set "AXISFORGE_APP=run\AxisForgeCAD-1.0.2.exe"
 run\axisforge_tests.exe
 if errorlevel 1 goto failed
 start /wait "" "%AXISFORGE_APP%" --vsync=1 --self-test "%~dp0test-artifacts"

@@ -64,6 +64,7 @@ QByteArray serialize(const Scene &s) {
         auto q = b.rotation;
         QJsonObject object{{"id", b.id},
                            {"name", b.name},
+                           {"parentId", b.parentId},
                            {"shape", shapeKey(b.shape)},
                            {"parameters", QJsonObject{{"width", p.width},
                                                       {"depth", p.depth},
@@ -95,19 +96,7 @@ QByteArray serialize(const Scene &s) {
                                  {"enabled", m.enabled}});
     return QJsonDocument(
                QJsonObject{{"format", "axisforge.project"},
-                           {"version", std::any_of(s.mates.begin(), s.mates.end(),
-                                                   [](const Mate &m) { return m.type == MateType::Ground; })
-                                           ? 6
-                                       : std::any_of(s.bodies.begin(), s.bodies.end(),
-                                                     [](const Body &b) { return int(b.shape) >= 7; })
-                                           ? 5
-                                       : std::any_of(s.mates.begin(), s.mates.end(),
-                                                     [](const Mate &m) { return int(m.type) >= 4; })
-                                           ? 4
-                                       : std::any_of(s.bodies.begin(), s.bodies.end(),
-                                                     [](const Body &b) { return b.shape == Shape::Mesh; })
-                                           ? 3
-                                           : 2},
+                           {"version", ProjectFormatVersion},
                            {"units", "mm"},
                            {"title", s.title},
                            {"bodies", bodies},
@@ -129,11 +118,9 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
     try {
         const auto root = doc.object();
         if (string(root, "format") != "axisforge.project" ||
-            (integer(root, "version") != 1 && integer(root, "version") != 2 &&
-             integer(root, "version") != 3 && integer(root, "version") != 4 &&
-             integer(root, "version") != 5 && integer(root, "version") != 6) ||
+            integer(root, "version") != ProjectFormatVersion ||
             string(root, "units") != "mm")
-            return fail(QStringLiteral("不支持的项目格式、版本或单位。"));
+            return fail(QStringLiteral("1.0.2 仅支持格式8、axisforge.project、mm单位的项目。"));
         if (!root["bodies"].isArray() || !root["mates"].isArray())
             return fail(QStringLiteral("项目缺少模型或约束列表。"));
         if (root["bodies"].toArray().size() > 300 || root["mates"].toArray().size() > 1000)
@@ -148,14 +135,15 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             Body b;
             b.id = string(o, "id");
             b.name = string(o, "name");
+            b.parentId=string(o,"parentId");
+
             int shape = QStringList{"box",  "sphere", "cylinder", "cone",      "torus", "solid",
-                                    "mesh", "tube",   "frustum",  "ellipsoid", "wedge"}
+                                    "mesh", "tube",   "frustum",  "ellipsoid", "wedge", "group"}
                             .indexOf(string(o, "shape"));
             if (shape < 0)
                 throw std::runtime_error("Unknown shape");
             b.shape = Shape(shape);
-            if (shape >= 7 && integer(root, "version") < 5)
-                throw std::runtime_error("新增图元需要项目 version 5。");
+
             if (!o["parameters"].isObject())
                 throw std::runtime_error("Missing parameters");
             auto p = o["parameters"].toObject();
@@ -172,15 +160,11 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             b.visible = boolean(o, "visible");
             b.fixed = boolean(o, "fixed");
             if (b.shape == Shape::Solid) {
-                if (integer(root, "version") < 2)
-                    throw std::runtime_error("实体需要项目格式version 2。");
                 QString why;
                 if (!decodeBrep(string(o, "brep").toLatin1(), b, &why))
                     throw std::runtime_error(why.toStdString());
             }
             if (b.shape == Shape::Mesh) {
-                if (integer(root, "version") < 3)
-                    throw std::runtime_error("网格需要项目格式 version 3。");
                 QString why;
                 if (!decodeMesh(string(o, "mesh").toLatin1(), b, &why, 3000000 - meshVertices))
                     throw std::runtime_error(why.toStdString());
@@ -202,18 +186,11 @@ bool deserialize(const QByteArray &bytes, Scene &scene, QString *error) {
             if (type < 0)
                 throw std::runtime_error("Unknown mate");
             m.type = MateType(type);
-            if (m.type == MateType::Ground && integer(root, "version") < 6)
-                throw std::runtime_error("地面配合需要项目 version 6。");
             m.sourceAxis = integer(o, "sourceAxis");
             m.targetAxis = integer(o, "targetAxis");
             m.distance = number(o, "distance");
-            if (type >= 4 && integer(root, "version") < 4)
-                throw std::runtime_error("扩展配合需要项目 version 4。");
-            m.angle = o.contains("angle") ? number(o, "angle") : 90;
-            m.offset = o.contains("offset") ? number(o, "offset") : 0;
-            if ((m.type == MateType::Angle && !o.contains("angle")) ||
-                (m.type == MateType::AxialOffset && !o.contains("offset")))
-                throw std::runtime_error("扩展配合缺少参数。");
+            m.angle = number(o, "angle");
+            m.offset = number(o, "offset");
             m.enabled = boolean(o, "enabled");
             result.mates << m;
         }
@@ -280,7 +257,7 @@ bool exportMesh(const QString &path, const Scene &scene, bool stl, QString *erro
     else
         out << "# AxisForge CAD | units: mm | visible bodies only\n";
     for (const auto &body : scene.bodies) {
-        if (!body.visible)
+        if (body.shape==Shape::Group || !scene.isVisible(body.id))
             continue;
         auto mesh = tessellate(body);
         auto matrix = body.matrix();

@@ -1,0 +1,510 @@
+{
+  "bodies": [
+    {
+      "id": "bearing-assembly",
+      "name": "轴承总装",
+      "shape": "group",
+      "parentId": "",
+      "parameters": {
+        "width": 30,
+        "height": 30,
+        "depth": 30,
+        "radius": 15,
+        "tubeRadius": 5,
+        "segments": 48
+      },
+      "position": [
+        0,
+        0,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "color": "#78c9ba",
+      "visible": true,
+      "fixed": false
+    },
+    {
+      "id": "rolling-elements",
+      "name": "滚珠组",
+      "shape": "group",
+      "parentId": "bearing-assembly",
+      "parameters": {
+        "width": 30,
+        "height": 30,
+        "depth": 30,
+        "radius": 15,
+        "tubeRadius": 5,
+        "segments": 48
+      },
+      "position": [
+        0,
+        0,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "color": "#78c9ba",
+      "visible": true,
+      "fixed": false
+    },
+    {
+      "id": "retainer",
+      "name": "保持架组",
+      "shape": "group",
+      "parentId": "bearing-assembly",
+      "parameters": {
+        "width": 30,
+        "height": 30,
+        "depth": 30,
+        "radius": 15,
+        "tubeRadius": 5,
+        "segments": 48
+      },
+      "position": [
+        0,
+        0,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "color": "#78c9ba",
+      "visible": true,
+      "fixed": false
+    },
+    {
+      "color": "#95b2c7",
+      "fixed": true,
+      "id": "16b41bba-75ab-4b2f-bc74-98cb523d0a48",
+      "name": "外圈 Ø48 / Ø41",
+      "parameters": {
+        "depth": 30,
+        "height": 14,
+        "radius": 24,
+        "segments": 64,
+        "tubeRadius": 20.5,
+        "width": 30
+      },
+      "position": [
+        0,
+        0,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "tube",
+      "visible": true,
+      "parentId": "bearing-assembly"
+    },
+    {
+      "color": "#c3d2df",
+      "fixed": false,
+      "id": "6bb644f6-457c-4f38-b961-ac161e9e51cc",
+      "name": "内圈 Ø27 / Ø20",
+      "parameters": {
+        "depth": 30,
+        "height": 14,
+        "radius": 13.5,
+        "segments": 64,
+        "tubeRadius": 10,
+        "width": 30
+      },
+      "position": [
+        0,
+        0,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "tube",
+      "visible": true,
+      "parentId": "bearing-assembly"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "b0f007a2-b747-47b5-b34f-b334691309a1",
+      "name": "滚珠 1 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        17,
+        0,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "eded6a2d-79f4-429c-880e-115a119e712f",
+      "name": "滚珠 2 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        13.753289222717285,
+        9.992349624633789,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "42c99d79-2c80-4a94-8622-e9cd4e066ce3",
+      "name": "滚珠 3 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        5.253288745880127,
+        16.16796112060547,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "c657e6ca-7af2-47b4-8364-ecc9b8e74169",
+      "name": "滚珠 4 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        -5.253288745880127,
+        16.16796112060547,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "54e8a012-6313-43d1-95e2-8f0b4542bc90",
+      "name": "滚珠 5 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        -13.753289222717285,
+        9.992349624633789,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "5b8f29a5-7723-4471-9921-659a358c9db5",
+      "name": "滚珠 6 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        -17,
+        2.0818996229250058e-15,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "da1108fa-e862-4ecb-970e-6d4a9fc33ad2",
+      "name": "滚珠 7 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        -13.753289222717285,
+        -9.992349624633789,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "29bb49c4-e9c8-4216-9bf5-ef3ed3c585c8",
+      "name": "滚珠 8 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        -5.253288745880127,
+        -16.16796112060547,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "1abdee4c-ff09-45ad-a96f-d293cec1205f",
+      "name": "滚珠 9 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        5.253288745880127,
+        -16.16796112060547,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#e0e8f0",
+      "fixed": false,
+      "id": "6d3d0b58-d333-473c-8ff7-a933b99dc1f6",
+      "name": "滚珠 10 · Ø7",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 3.5,
+        "segments": 24,
+        "tubeRadius": 5,
+        "width": 30
+      },
+      "position": [
+        13.753289222717285,
+        -9.992349624633789,
+        7
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "sphere",
+      "visible": true,
+      "parentId": "rolling-elements"
+    },
+    {
+      "color": "#d6a65c",
+      "fixed": false,
+      "id": "8bc612d3-58fc-4768-8aa5-f529b0103da3",
+      "name": "保持架示意环",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 17,
+        "segments": 64,
+        "tubeRadius": 0.7,
+        "width": 30
+      },
+      "position": [
+        0,
+        0,
+        2.5
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "torus",
+      "visible": true,
+      "parentId": "retainer"
+    },
+    {
+      "color": "#d6a65c",
+      "fixed": false,
+      "id": "6531d796-3860-4a66-b893-40ad0dd76fb6",
+      "name": "保持架示意环",
+      "parameters": {
+        "depth": 30,
+        "height": 30,
+        "radius": 17,
+        "segments": 64,
+        "tubeRadius": 0.7,
+        "width": 30
+      },
+      "position": [
+        0,
+        0,
+        11.5
+      ],
+      "rotation": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "shape": "torus",
+      "visible": true,
+      "parentId": "retainer"
+    }
+  ],
+  "format": "axisforge.project",
+  "mates": [
+    {
+      "angle": 90,
+      "distance": 30,
+      "enabled": true,
+      "id": "mate-0",
+      "offset": 0,
+      "source": "16b41bba-75ab-4b2f-bc74-98cb523d0a48",
+      "sourceAxis": 2,
+      "target": "6bb644f6-457c-4f38-b961-ac161e9e51cc",
+      "targetAxis": 2,
+      "type": "coaxial"
+    },
+    {
+      "angle": 90,
+      "distance": 30,
+      "enabled": true,
+      "id": "mate-1",
+      "offset": 0,
+      "source": "16b41bba-75ab-4b2f-bc74-98cb523d0a48",
+      "sourceAxis": 2,
+      "target": "6bb644f6-457c-4f38-b961-ac161e9e51cc",
+      "targetAxis": 2,
+      "type": "axialOffset"
+    }
+  ],
+  "title": "轴承层级装配 · 总装 → 滚珠组／保持架组",
+  "units": "mm",
+  "version": 8
+}

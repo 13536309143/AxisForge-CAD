@@ -20,7 +20,9 @@ class Document : public QObject {
     bool edit(const QString &label, const std::function<void(Scene &)> &operation, QString *error = nullptr);
     void replace(const Scene &scene);
     QString addBody(Shape shape);
-    QString addBody(Shape shape, const Parameters &parameters, const QString &name = {}, QString *error = nullptr);
+    QString addBody(Shape shape, const Parameters &parameters, const QString &name = {}, QString *error = nullptr, const QString &parentId = {});
+    QString addGroup(const QString &parentId={});
+    bool reparent(const QString &id,const QString &parentId,QString *error=nullptr);
     void removeBody(const QString &id);
     QString duplicateBody(const QString &id);
     QString booleanOperation(const QString &a, const QString &b, BooleanOp op, bool hideOperands = true,

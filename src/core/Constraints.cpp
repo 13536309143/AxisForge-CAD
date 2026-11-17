@@ -9,7 +9,7 @@ Residual residual(const Scene &s, const Mate &m) {
     Residual r;
     if (m.type == MateType::Ground) {
         auto b = s.find(m.target);
-        r.linear = b ? std::abs(minimumWorldZ(*b) - m.offset) : 1e20;
+        r.linear = b ? std::abs(s.minimumZ(b->id) - m.offset) : 1e20;
         return r;
     }
     auto a = s.find(m.source), b = s.find(m.target);
@@ -54,6 +54,9 @@ bool solve(Scene &scene, QString *error) {
             ++indegree[m.target];
             next[m.source].push_back(m.target);
         }
+    for(const auto &b:work.bodies)if(!b.parentId.isEmpty()) {
+        ++indegree[b.id];next[b.parentId].push_back(b.id);
+    }
     QVector<QString> order;
     for (const auto &b : work.bodies)
         if (indegree[b.id] == 0)
@@ -69,11 +72,12 @@ bool solve(Scene &scene, QString *error) {
         if (b->fixed)
             continue;
         for (int pass = 0; pass < 64; ++pass) {
+            const auto oldPosition=b->position;const auto oldRotation=b->rotation;
             for (const auto &m : work.mates) {
                 if (!m.enabled || m.target != id)
                     continue;
                 if (m.type == MateType::Ground) {
-                    b->position.setZ(float(b->position.z() + m.offset - minimumWorldZ(*b)));
+                    b->position.setZ(float(b->position.z() + m.offset - work.minimumZ(b->id)));
                     continue;
                 }
                 const Body *a = work.find(m.source);
@@ -119,6 +123,7 @@ bool solve(Scene &scene, QString *error) {
                     b->position = a->position + delta.normalized() * float(m.distance);
                 }
             }
+            work.moveDescendants(id,oldPosition,oldRotation);
             bool satisfied = true;
             for (const auto &m : work.mates)
                 if (m.enabled && m.target == id && !residual(work, m).satisfied())

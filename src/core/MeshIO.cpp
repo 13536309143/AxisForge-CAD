@@ -750,7 +750,7 @@ bool exportGlb(const QString &path, const Scene &scene, QString *error) {
         QByteArray bin;
         QJsonArray nodes, meshes, materials, views, accessors, roots;
         for (const auto &body : scene.bodies)
-            if (body.visible) {
+            if (body.shape!=Shape::Group && scene.isVisible(body.id)) {
                 const auto mesh = tessellate(body);
                 int count = mesh.vertices.size();
                 require(qint64(bin.size()) + qint64(count) * 24 <= MaxBytes,
@@ -858,7 +858,7 @@ bool exportObj(const QString &path, const Scene &scene, QString *error) {
         qint64 first = 1;
         int index = 0;
         for (const auto &body : scene.bodies)
-            if (body.visible) {
+            if (body.shape!=Shape::Group && scene.isVisible(body.id)) {
                 auto mesh = tessellate(body);
                 QString name = body.name;
                 name.replace('\n', ' ');

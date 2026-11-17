@@ -270,14 +270,14 @@ for (const auto &face :
         CHECK(!importMeshFile(p, out));
         CHECK(out.size() == 1 && out[0].id == id);
     });
-test("mesh project version 3 roundtrip and old version rejection", [] {
+test("mesh project current format roundtrip and old version rejection", [] {
     Mesh m;
     m.vertices = {{{0, 0, 0}, {0, 0, 1}}, {{10, 0, 0}, {0, 0, 1}}, {{0, 20, 0}, {0, 0, 1}}};
     Scene s;
     s.bodies << makeMeshBody("saved", m);
     s.bodies[0].position = {20, 30, 40};
     auto root = QJsonDocument::fromJson(serialize(s)).object();
-    CHECK(root["version"].toInt() == 3);
+    CHECK(root["version"].toInt() == 8);
     Scene loaded;
     CHECK(deserialize(serialize(s), loaded));
     CHECK(loaded.bodies[0].shape == Shape::Mesh);

@@ -200,6 +200,7 @@ std::shared_ptr<const SolidData> createSolid(const TopoDS_Shape &input, int segm
 }
 std::shared_ptr<const SolidData> solidData(const Body &b) {
     initializeKernel();
+    if(b.shape==Shape::Group) {static const auto empty=std::make_shared<const SolidData>();return empty;}
     if (b.shape == Shape::Solid || b.shape == Shape::Mesh) {
         if (!b.solid)
             throw std::runtime_error("实体数据缺失。");
@@ -269,6 +270,7 @@ std::shared_ptr<const SolidData> solidData(const Body &b) {
                                   p.width, p.depth, p.height, 0)
                 .Shape();
         break;
+    case Shape::Group:
     case Shape::Solid:
     case Shape::Mesh:
         break;
@@ -292,7 +294,7 @@ double minimumWorldZ(const Body &body) {
     return z;
 }
 TopoDS_Shape worldShape(const Body &body) {
-    if (body.shape == Shape::Mesh)
+    if (body.shape == Shape::Mesh || body.shape == Shape::Group)
         throw std::runtime_error("网格不是 OCCT 实体，不能进行实体布尔或 STEP 导出。请使用 GLB/OBJ/STL。 ");
     return BRepBuilderAPI_Transform(solidData(body)->shape, placement(body), Standard_True).Shape();
 }

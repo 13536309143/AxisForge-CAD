@@ -57,17 +57,18 @@ void Viewport::sampleFrames() {
 }
 Viewport::Metrics Viewport::metrics() const {
     Metrics m=frameMetrics_;
-    m.instances = scene_.bodies.size();
+    m.instances = 0;
+    for(const auto &b:scene_.bodies)if(b.shape!=Shape::Group)++m.instances;
     m.presentedFrames = totalFrames_;
     for (const auto &b : scene_.bodies)
-        if (b.visible)
+        if (b.shape!=Shape::Group && scene_.isVisible(b.id))
             ++m.visibleInstances;
     for (const auto &gpu : meshes_) {
         m.vertices += gpu->count;
         m.triangles += gpu->count / 3;
         m.gpuBufferBytes += quint64(gpu->allocatedVertices) * sizeof(Vertex);
         const auto *b = scene_.find(gpu->id);
-        if (b && b->visible) {
+        if (b && scene_.isVisible(b->id)) {
             m.visibleVertices += gpu->count;
             m.visibleTriangles += gpu->count / 3;
         }
@@ -185,6 +186,7 @@ void Viewport::rebuild() {
     auto previous=std::move(meshes_);
     meshes_.clear();
     for (const auto &body : scene_.bodies) {
+        if(body.shape==Shape::Group) continue;
         const auto topology = solidData(body);
         bool reused=false;
         for(auto &old:previous) if(old && old->id==body.id && old->source==topology) {
@@ -347,7 +349,7 @@ QString Viewport::pickAt(const QPoint &point) const {
         QString id;
         const auto direction = (end - start).normalized();
         for (const auto &body : scene_.bodies) {
-            if (!body.visible)
+            if (body.shape==Shape::Group || !scene_.isVisible(body.id))
                 continue;
             auto inverse = body.matrix().inverted();
             auto origin = inverse.map(start), ray = inverse.mapVector(direction);
@@ -419,15 +421,15 @@ void Viewport::paintGL() {
         }
         for (const auto &gpu : meshes_) {
             const Body *b = scene_.find(gpu->id);
-            if (!b || !b->visible)
+            if (!b || !scene_.isVisible(b->id))
                 continue;
             const auto model = b->matrix();
             if(cullingEnabled_ && outsideFrustum(gpu->bounds,vp*model)) {
                 ++frameMetrics_.culledInstances; continue;
             }
             ++frameMetrics_.drawnInstances;
-            const bool related = guide.valid && (b->id == guide.source || b->id == guide.target);
-            const bool highlighted = b->id == selected_ || related;
+            const bool related = guide.valid && (b->id == guide.source || b->id == guide.target || scene_.descendantOf(b->id,guide.source) || scene_.descendantOf(b->id,guide.target));
+            const bool highlighted = b->id == selected_ || scene_.descendantOf(b->id,selected_) || related;
             int level=0;
             if(lodEnabled_ && displayMode_==DisplayMode::Normal && !highlighted) {
                 const auto center=(view()*model).map(gpu->bounds.center());
@@ -439,7 +441,7 @@ void Viewport::paintGL() {
             gpu->level=level;
             ++frameMetrics_.lodInstances[level];
             const auto highlight = related ? (!guide.enabled          ? QVector3D(.65f, .68f, .72f)
-                                              : b->id == guide.source ? QVector3D(.33f, .85f, .94f)
+                                              : (b->id == guide.source || scene_.descendantOf(b->id,guide.source)) ? QVector3D(.33f, .85f, .94f)
                                                                       : QVector3D(1.f, .72f, .4f))
                                            : QVector3D(1.f, .73f, .32f);
             program_->setUniformValue("mvp", vp * model);
@@ -524,6 +526,8 @@ void Viewport::mousePressEvent(QMouseEvent *e) {
     setFocus();
     if (e->button() == Qt::LeftButton) {
         dragId_ = pickAt(e->pos());
+        const auto *selectedGroup=scene_.find(selected_);
+        if(selectedGroup && selectedGroup->shape==Shape::Group && scene_.descendantOf(dragId_,selected_))dragId_=selected_;
         emit selected(dragId_);
         if (matePicking_) {
             dragId_.clear();

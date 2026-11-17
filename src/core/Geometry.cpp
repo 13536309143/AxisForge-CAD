@@ -20,7 +20,7 @@ Mesh tessellate(const Body &body) {
 Bounds sceneBounds(const Scene &scene) {
     Bounds b;
     for (const auto &body : scene.bodies)
-        if (body.visible)
+        if (body.shape!=Shape::Group && scene.isVisible(body.id))
             for (const auto &v : tessellate(body).vertices)
                 b.include(body.matrix().map(v.position));
     return b;
@@ -31,7 +31,7 @@ Hit pick(const Scene &scene, const QVector3D &origin, const QVector3D &direction
     if (dir.isNull())
         return hit;
     for (const auto &b : scene.bodies) {
-        if (!b.visible)
+        if (b.shape==Shape::Group || !scene.isVisible(b.id))
             continue;
         const QMatrix4x4 matrix = b.matrix();
         const auto mesh = tessellate(b);

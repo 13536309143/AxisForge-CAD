@@ -38,6 +38,9 @@
 #include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
+#include <QInputDialog>
+#include <QTreeWidgetItemIterator>
+#include <QDropEvent>
 #include <QToolBar>
 #include <QToolButton>
 #include <QUuid>
@@ -46,6 +49,20 @@
 #include <stdexcept>
 
 namespace af {
+class HierarchyTree final:public QTreeWidget {
+public:
+    std::function<void(QString,QString)> reparent;
+protected:
+    void dropEvent(QDropEvent *event) override {
+        if(event->source()!=this||!currentItem()){event->ignore();return;}
+        const QString id=currentItem()->data(0,Qt::UserRole).toString();
+        auto *target=itemAt(event->pos());
+        if(target && dropIndicatorPosition()!=QAbstractItemView::OnItem)target=target->parent();
+        const QString parent=target?target->data(0,Qt::UserRole).toString():QString();
+        event->acceptProposedAction();
+        QTimer::singleShot(0,this,[this,id,parent]{if(reparent)reparent(id,parent);});
+    }
+};
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), document_(this) {
     setObjectName("mainWindow");
     resize(1480, 920);
@@ -55,8 +72,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), document_(this) {
     setCentralWidget(viewport_);
     buildActions();
     auto *examplesMenu=menuBar()->addMenu(QStringLiteral("示例"));
-    const QStringList files={"bearing", "gear", "linear-guide"};
-    const QStringList names={QStringLiteral("滚珠轴承"),QStringLiteral("直齿轮"),QStringLiteral("直线导轨")};
+    const QStringList files={"bearing", "gear", "linear-guide", "hierarchy-bearing"};
+    const QStringList names={QStringLiteral("滚珠轴承"),QStringLiteral("直齿轮"),QStringLiteral("直线导轨"),QStringLiteral("轴承（层级装配）")};
     for(int i=0;i<files.size();++i) {
         auto *action=examplesMenu->addAction(names[i]);
         connect(action,&QAction::triggered,this,[this,file=files[i]] {
@@ -396,13 +413,36 @@ void MainWindow::buildPanels() {
     dock->setObjectName("assemblyDock");
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     auto *tabs = new QTabWidget;
-    tree_ = new QTreeWidget;
+    auto *hierarchy=new HierarchyTree;
+    hierarchy->setDragEnabled(true);hierarchy->setAcceptDrops(true);hierarchy->setDropIndicatorShown(true);
+    hierarchy->setDragDropMode(QAbstractItemView::InternalMove);
+    hierarchy->setDefaultDropAction(Qt::MoveAction);
+    hierarchy->reparent=[this](const QString&id,const QString&parent){QString why;if(!document_.reparent(id,parent,&why))statusBar()->showMessage(why,8000);};
+    tree_ = hierarchy;
     tree_->setObjectName("sceneTree");
     tree_->installEventFilter(this);
     tree_->setContextMenuPolicy(Qt::ActionsContextMenu);
     tree_->addAction(findChild<QAction *>("deleteBody"));
     tree_->setHeaderLabels({QStringLiteral("模型"), QStringLiteral("状态")});
-    tree_->setRootIsDecorated(false);
+    tree_->setRootIsDecorated(true);
+    auto *rootGroup=new QAction(QStringLiteral("新建根空节点"),tree_);rootGroup->setObjectName("newRootGroup");
+    tree_->addAction(rootGroup);connect(rootGroup,&QAction::triggered,this,[this]{selectBody(document_.addGroup());});
+    auto *childGroup=new QAction(QStringLiteral("新增子空节点"),tree_);childGroup->setObjectName("newChildGroup");
+    tree_->addAction(childGroup);connect(childGroup,&QAction::triggered,this,[this]{selectBody(document_.addGroup(selection_));});
+    auto *parentAction=new QAction(QStringLiteral("设置父节点…"),tree_);parentAction->setObjectName("setParent");tree_->addAction(parentAction);
+    connect(parentAction,&QAction::triggered,this,[this]{
+        if(!document_.scene().find(selection_))return;
+        QStringList labels{QStringLiteral("场景根节点")},ids{QString()};
+        for(const auto &b:document_.scene().bodies)if(b.id!=selection_&&!document_.scene().descendantOf(b.id,selection_)){
+            labels<<b.name+" ["+b.id.left(8)+"]";ids<<b.id;
+        }
+        bool ok=false;auto choice=QInputDialog::getItem(this,QStringLiteral("父节点"),QStringLiteral("挂接时保留世界位姿"),labels,0,false,&ok);
+        if(ok){QString why;if(!document_.reparent(selection_,ids[labels.indexOf(choice)],&why))QMessageBox::warning(this,QStringLiteral("无法挂接"),why);}
+    });
+    auto *detach=new QAction(QStringLiteral("移到场景根节点"),tree_);detach->setObjectName("detachNode");tree_->addAction(detach);
+    connect(detach,&QAction::triggered,this,[this]{document_.reparent(selection_,{});});
+    auto *hierarchyMenu=menuBar()->addMenu(QStringLiteral("模型树"));
+    for(auto *a:{rootGroup,childGroup,parentAction,detach})hierarchyMenu->addAction(a);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     tabs->addTab(tree_, QStringLiteral("模型树"));
@@ -512,6 +552,7 @@ void MainWindow::buildPanels() {
         form->labelForField(spin)->setObjectName(key + "Label");
     };
     auto *dimensions = new QGroupBox(QStringLiteral("参数化几何"));
+    dimensions->setObjectName("geometrySection");
     auto *df = new QFormLayout(dimensions);
     addNumber(df, "width", QStringLiteral("宽度 X"), 0.1, 10000, " mm");
     addNumber(df, "depth", QStringLiteral("深度 Y"), 0.1, 10000, " mm");
@@ -681,19 +722,29 @@ void MainWindow::log(const QString &text) {
 }
 void MainWindow::refresh() {
     refreshing_ = true;
+    QMap<QString,bool> expanded;
+    for(QTreeWidgetItemIterator it(tree_);*it;++it)expanded[(*it)->data(0,Qt::UserRole).toString()]=(*it)->isExpanded();
     tree_->clear();
+    QMap<QString,QTreeWidgetItem*> nodes;
     for (const auto &b : document_.scene().bodies) {
-        auto *item = new QTreeWidgetItem(tree_);
-        item->setText(0, b.name);
-        item->setText(1, !b.visible ? QStringLiteral("隐藏")
+        auto *item = new QTreeWidgetItem;
+        nodes[b.id]=item;
+        item->setText(0, (b.shape==Shape::Group?QStringLiteral("▣ "):QString())+b.name);
+        item->setText(1, !document_.scene().isVisible(b.id) ? QStringLiteral("隐藏")
                          : b.fixed  ? QStringLiteral("固定")
                                     : QStringLiteral("自由"));
         item->setData(0, Qt::UserRole, b.id);
         item->setForeground(0, b.color);
         item->setToolTip(0, shapeName(b.shape) + " · " + b.id);
-        if (b.id == selection_)
-            tree_->setCurrentItem(item);
+
     }
+    for(const auto &b:document_.scene().bodies) {
+        auto *item=nodes[b.id];
+        if(nodes.contains(b.parentId))nodes[b.parentId]->addChild(item);else tree_->addTopLevelItem(item);
+        item->setExpanded(expanded.value(b.id,true));
+
+    }
+    if(nodes.contains(selection_))tree_->setCurrentItem(nodes[selection_]);
     if (!document_.scene().find(selection_))
         selection_.clear();
     if (!findMate(document_.scene(), mateSelection_))
@@ -718,7 +769,7 @@ void MainWindow::refresh() {
         if (m.enabled)
             ++active;
     }
-    summary_->setText(QStringLiteral("%1 个模型  ·  %2 个有效配合  ·  mm")
+    summary_->setText(QStringLiteral("%1 个节点  ·  %2 个有效配合  ·  mm")
                           .arg(document_.scene().bodies.size())
                           .arg(active));
     viewport_->setScene(document_.scene());
@@ -743,8 +794,8 @@ void MainWindow::selectBody(const QString &id) {
     refreshing_ = true;
     tree_->clearSelection();
     mateTree_->clearSelection();
-    for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
-        auto *item = tree_->topLevelItem(i);
+    for (QTreeWidgetItemIterator it(tree_);*it;++it) {
+        auto *item = *it;
         if (item->data(0, Qt::UserRole).toString() == selection_) {
             tree_->setCurrentItem(item);
             item->setSelected(true);
@@ -763,7 +814,9 @@ void MainWindow::showProperties() {
         stats_->clear();
         return;
     }
-    kind_->setText(shapeName(b->shape) + QStringLiteral("  /  PARAMETRIC"));
+    kind_->setText(shapeName(b->shape) + (b->shape==Shape::Group?QStringLiteral(" / ASSEMBLY"):QStringLiteral(" / PARAMETRIC")));
+    propertyForm_->findChild<QGroupBox*>("geometrySection")->setVisible(b->shape!=Shape::Group);
+    fixed_->setText(b->parentId.isEmpty()?QStringLiteral("固定 · 不接受自身配合或拖动"):QStringLiteral("相对父节点固定 · 仍跟随祖先运动"));
     name_->setText(b->name);
     pendingColor_ = b->color;
     color_->setText(b->color.name());
@@ -824,6 +877,11 @@ void MainWindow::showProperties() {
         numbers_[QString("pos%1").arg(i)]->setValue(b->position[i]);
         numbers_[QString("rot%1").arg(i)]->setValue(e[i]);
     }
+    if(b->shape==Shape::Group) {
+        int descendants=0;for(const auto &child:document_.scene().bodies)if(document_.scene().descendantOf(child.id,b->id))++descendants;
+        stats_->setText(QStringLiteral("空节点 · %1 个后代节点\n位置／旋转为世界坐标。移动或旋转会带动整个子树。\n父节点配合通过位姿传递；固定阻止自身被配合或拖动驱动，但仍跟随祖先运动。\n右键模型树可挂接、脱离或新增空节点；拖放可调整父子关系。").arg(descendants));
+        return;
+    }
     const int triangles = tessellate(*b).vertices.size() / 3;
     const auto topology = solidData(*b);
     if (b->shape == Shape::Mesh) {
@@ -856,7 +914,7 @@ void MainWindow::applyProperties() {
     updated.color = pendingColor_;
     updated.visible = visible_->isChecked();
     updated.fixed = fixed_->isChecked();
-    if (updated.shape != Shape::Solid && updated.shape != Shape::Mesh) {
+    if (updated.shape != Shape::Solid && updated.shape != Shape::Mesh && updated.shape != Shape::Group) {
         auto &p = updated.params;
         p.width = numbers_["width"]->value();
         p.depth = numbers_["depth"]->value();
@@ -878,7 +936,7 @@ void MainWindow::applyProperties() {
 }
 void MainWindow::booleanDialog(BooleanOp op) {
     if (std::count_if(document_.scene().bodies.begin(), document_.scene().bodies.end(),
-                      [](const Body &b) { return b.shape != Shape::Mesh; }) < 2) {
+                      [](const Body &b) { return b.shape != Shape::Mesh && b.shape != Shape::Group; }) < 2) {
         statusBar()->showMessage(QStringLiteral("布尔运算需要至少两个 OCCT 实体；网格不参与。"), 6000);
         return;
     }
@@ -889,7 +947,7 @@ void MainWindow::booleanDialog(BooleanOp op) {
     auto *form = new QFormLayout;
     auto *a = new QComboBox, *b = new QComboBox, *type = new QComboBox;
     for (const auto &body : document_.scene().bodies) {
-        if (body.shape == Shape::Mesh)
+        if (body.shape == Shape::Mesh || body.shape == Shape::Group)
             continue;
         a->addItem(body.name, body.id);
         b->addItem(body.name, body.id);
@@ -1354,6 +1412,7 @@ int MainWindow::runSelfTest(const QString &directory) {
 #include "mate_checks.inc"
 #include "release_checks.inc"
 #include "mechanical_checks.inc"
+#include "hierarchy_checks.inc"
         document_.replace(beforeMesh);
         selectBody(solidId);
         viewport_->fitAll();

@@ -147,7 +147,7 @@ bool exportStep(const QString &path, const Scene &scene, QString *error) {
         auto colors = XCAFDoc_DocumentTool::ColorTool(document->Main());
         int count = 0;
         for (const auto &body : scene.bodies) {
-            if (!body.visible)
+            if (body.shape==Shape::Group || !scene.isVisible(body.id))
                 continue;
             auto label = shapes->AddShape(worldShape(body), Standard_False);
             TDataStd_Name::Set(label,

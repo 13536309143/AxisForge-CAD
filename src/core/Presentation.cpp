@@ -26,7 +26,7 @@ const Mate *findMate(const Scene &scene, const QString &id) {
 Bounds visibleWorldBounds(const Scene &scene) {
     Bounds result;
     for (const auto &body : scene.bodies)
-        if (body.visible) {
+        if (body.shape!=Shape::Group && scene.isVisible(body.id)) {
             const auto bounds = solidData(body)->bounds;
             const auto matrix = body.matrix();
             for (int i = 0; i < 8; ++i)
@@ -73,7 +73,7 @@ MateGuide mateGuide(const Scene &scene, const Mate &m) {
         if (!body)
             return g;
         g.valid = true;
-        g.visible = body->visible;
+        g.visible = scene.isVisible(body->id);
         g.satisfied = residual(scene, m).satisfied();
         g.title = QStringLiteral("地面对齐") +
                   (m.enabled ? (g.satisfied ? QStringLiteral(" · 满足") : QStringLiteral(" · 未满足"))
@@ -81,7 +81,7 @@ MateGuide mateGuide(const Scene &scene, const Mate &m) {
         g.detail = QStringLiteral("固定地面 Z=0 → %1 · 离地 %2 mm").arg(body->name).arg(m.offset);
         if (g.visible) {
             auto p = body->position;
-            p.setZ(float(minimumWorldZ(*body)));
+            p.setZ(float(scene.minimumZ(body->id)));
             auto q = p;
             q.setZ(0);
             const QColor c = m.enabled ? measureColor : QColor("#a1a8b4");
@@ -90,7 +90,7 @@ MateGuide mateGuide(const Scene &scene, const Mate &m) {
             g.lines << GuideLine{q - QVector3D(size, 0, 0), q + QVector3D(size, 0, 0), c, false}
                     << GuideLine{q - QVector3D(0, size, 0), q + QVector3D(0, size, 0), c, false};
             g.labels << GuideLabel{
-                q, QStringLiteral("地面 Z=0 · 离地 %1 mm").arg(minimumWorldZ(*body), 0, 'f', 3), c};
+                q, QStringLiteral("地面 Z=0 · 离地 %1 mm").arg(scene.minimumZ(body->id), 0, 'f', 3), c};
         }
         return g;
     }
@@ -98,7 +98,7 @@ MateGuide mateGuide(const Scene &scene, const Mate &m) {
     if (!a || !b || a == b)
         return g;
     g.valid = true;
-    g.visible = a->visible && b->visible;
+    g.visible = scene.isVisible(a->id) && scene.isVisible(b->id);
     g.satisfied = residual(scene, m).satisfied();
     const auto u = a->axis(m.sourceAxis), v = b->axis(m.targetAxis), delta = b->position - a->position;
     const auto originA = a->position, originB = b->position, mid = (originA + originB) * .5f;

@@ -8,6 +8,7 @@
 #include <Bnd_Box.hxx>
 #include <QUndoCommand>
 #include <QUuid>
+#include <QMap>
 #include <algorithm>
 #include <cmath>
 namespace af {
@@ -40,7 +41,7 @@ bool Document::alignToFloor(const QString &id, QString *error) {
             *error = QStringLiteral("请先选中需要贴地的模型。");
         return false;
     }
-    if (body->fixed && std::abs(minimumWorldZ(*body)) > .001) {
+    if (body->fixed && std::abs(scene_.minimumZ(body->id)) > .001) {
         if (error)
             *error = QStringLiteral("模型已固定，不能被地面配合移动。请先取消该模型的固定状态。");
         return false;
@@ -68,6 +69,7 @@ bool Document::edit(const QString &label, const std::function<void(Scene &)> &op
     finishMove(false);
     Scene candidate = scene_;
     operation(candidate);
+    candidate.inheritEdits(scene_);
     QString why;
     if (!solve(candidate, &why)) {
         if (error)
@@ -89,12 +91,14 @@ void Document::replace(const Scene &scene) {
 QString Document::addBody(Shape shape) {
     return addBody(shape, Parameters{});
 }
-QString Document::addBody(Shape shape, const Parameters &parameters, const QString &name, QString *error) {
+QString Document::addBody(Shape shape, const Parameters &parameters, const QString &name, QString *error, const QString &parentId) {
     Body b = makeBody(shape, scene_.bodies.size() + 1);
     b.params = parameters;
+    b.parentId=parentId;
     if (!name.isEmpty())
         b.name = name;
     b.position = {float((scene_.bodies.size() % 4) * 38 - 50), float((scene_.bodies.size() / 4) * 38), 20};
+    if(const auto *p=scene_.find(parentId)){b.position=p->matrix().map(b.position);b.rotation=p->rotation;}
     if (!edit(QStringLiteral("创建 ") + shapeName(shape), [&](Scene &s) { s.bodies << b; }, error))
         return {};
     return b.id;
@@ -105,25 +109,44 @@ void Document::removeBody(const QString &id) {
         return;
     edit(QStringLiteral("删除模型"), [&](Scene &s) {
         s.bodies.erase(
-            std::remove_if(s.bodies.begin(), s.bodies.end(), [&](const Body &b) { return b.id == bodyId; }),
+            std::remove_if(s.bodies.begin(), s.bodies.end(), [&](const Body &b) { return b.id == bodyId || scene_.descendantOf(b.id,bodyId); }),
             s.bodies.end());
         s.mates.erase(std::remove_if(s.mates.begin(), s.mates.end(),
-                                     [&](const Mate &m) { return m.source == bodyId || m.target == bodyId; }),
+                                     [&](const Mate &m) { return m.source == bodyId || m.target == bodyId || scene_.descendantOf(m.source,bodyId) || scene_.descendantOf(m.target,bodyId); }),
                       s.mates.end());
     });
+}
+QString Document::addGroup(const QString &parentId) {
+    Body b=makeBody(Shape::Group,scene_.bodies.size()+1);b.parentId=parentId;
+    if(const auto *parent=scene_.find(parentId)){b.position=parent->position;b.rotation=parent->rotation;}
+    if(!edit(QStringLiteral("新建空节点"),[&](Scene&s){s.bodies<<b;}))return {};
+    return b.id;
+}
+bool Document::reparent(const QString &id,const QString &parentId,QString *error) {
+    if(!scene_.find(id))return false;
+    return edit(QStringLiteral("更改父节点"),[&](Scene&s){s.find(id)->parentId=parentId;},error);
 }
 QString Document::duplicateBody(const QString &id) {
     auto source = scene_.find(id);
     if (!source)
         return {};
-    Body copy = *source;
-    copy.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    copy.name += QStringLiteral(" · 副本");
-    copy.position += QVector3D(25, 25, 0);
-    copy.fixed = false;
-    if (!edit(QStringLiteral("复制模型"), [&](Scene &s) { s.bodies << copy; }))
-        return {};
-    return copy.id;
+    const Scene before=scene_;
+    QMap<QString,QString> ids;
+    for(const auto &b:before.bodies)if(b.id==id||before.descendantOf(b.id,id))
+        ids[b.id]=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if(!edit(QStringLiteral("复制模型子树"),[&](Scene&s){
+        for(const auto &b:before.bodies)if(ids.contains(b.id)) {
+            Body copy=b;copy.id=ids[b.id];copy.name+=QStringLiteral(" · 副本");
+            copy.position+=QVector3D(25,25,0);copy.fixed=false;
+            if(ids.contains(b.parentId))copy.parentId=ids[b.parentId];
+            s.bodies<<copy;
+        }
+        for(const auto &m:before.mates)if(ids.contains(m.source)&&ids.contains(m.target)) {
+            Mate copy=m;copy.id=QUuid::createUuid().toString(QUuid::WithoutBraces);
+            copy.source=ids[m.source];copy.target=ids[m.target];s.mates<<copy;
+        }
+    }))return {};
+    return ids[id];
 }
 void Document::beginMove(const QString &id) {
     finishMove(false);
@@ -195,6 +218,7 @@ void Document::previewMove(const QString &id, const QVector3D &position) {
         return;
     Scene candidate = *moveBefore_;
     candidate.find(id)->position = position;
+    candidate.inheritEdits(*moveBefore_);
     QString why;
     if (!solve(candidate, &why)) {
         emit rejected(why);

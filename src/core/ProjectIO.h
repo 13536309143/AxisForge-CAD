@@ -2,6 +2,7 @@
 #include "Scene.h"
 #include <QByteArray>
 namespace af {
+constexpr int ProjectFormatVersion = 8;
 QByteArray serialize(const Scene &scene);
 bool deserialize(const QByteArray &bytes, Scene &scene, QString *error = nullptr);
 bool saveProject(const QString &path, const Scene &scene, QString *error = nullptr);

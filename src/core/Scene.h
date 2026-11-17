@@ -8,7 +8,7 @@
 #include <memory>
 
 namespace af {
-enum class Shape { Box, Sphere, Cylinder, Cone, Torus, Solid, Mesh, Tube, Frustum, Ellipsoid, Wedge };
+enum class Shape { Box, Sphere, Cylinder, Cone, Torus, Solid, Mesh, Tube, Frustum, Ellipsoid, Wedge, Group };
 struct SolidData;
 enum class MateType { Coaxial, Parallel, Perpendicular, Distance, Coincident, Angle, AxialOffset, Ground };
 QString shapeKey(Shape shape);
@@ -20,7 +20,7 @@ struct Parameters {
     int segments = 48;
 };
 struct Body {
-    QString id, name;
+    QString id, name, parentId;
     Shape shape = Shape::Box;
     Parameters params;
     QVector3D position;
@@ -47,6 +47,11 @@ struct Scene {
     Body *find(const QString &id);
     const Body *find(const QString &id) const;
     bool validate(QString *error = nullptr) const;
+    bool descendantOf(const QString &id,const QString &ancestor) const;
+    bool isVisible(const QString &id) const;
+    void moveDescendants(const QString &id,const QVector3D &oldPosition,const QQuaternion &oldRotation);
+    void inheritEdits(const Scene &before);
+    double minimumZ(const QString &id) const;
 };
 Body makeBody(Shape shape, int ordinal = 1);
 Scene demoScene();
